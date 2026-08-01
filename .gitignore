@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Bundled FFmpeg runtime
+BKE_RENDER_DOCK/ffmpeg2.exe
