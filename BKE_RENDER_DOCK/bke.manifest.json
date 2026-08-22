@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "productId": "renderdock",
+  "displayName": "RENDERDOCK",
+  "version": "1.0.0",
+  "entryPoint": "RENDER DOCK.exe",
+  "updateChannel": "stable",
+  "minimumAgentVersion": "0.1.0",
+  "platform": "windows",
+  "architecture": "x64"
+}

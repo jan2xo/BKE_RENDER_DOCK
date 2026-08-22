@@ -1,28 +1,50 @@
-﻿using BKE_MediaTools;
+using BKE_MediaTools.Licensing;
 using static BKE_MediaTools.BKE_RenderDock;
 
 namespace BKE_MediaTools
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
         [STAThread]
-
-            
-
         static void Main()
         {
-            // To customize application configuration such as set high DPI settings or default font,
-            // see https://aka.ms/applicationconfiguration.
+            using var single = new Mutex(
+                initiallyOwned: true,
+                name: @"Global\BKE_RenderDock_SINGLE_INSTANCE",
+                out bool isNew);
 
-            using var single = new Mutex(initiallyOwned: true, name: @"Global\BKE_RenderDock_SINGLE_INSTANCE", out bool isNew);
-            if (!isNew) return; // already running → exit quietly
+            if (!isNew)
+            {
+                return;
+            }
+
             ApplicationConfiguration.Initialize();
-            if (ExpiryLite.TryHandleCli()) return;     // optional owner shortcut
-            ExpiryLite.InitializeOrCreateTrial(trialDays: 0);  // or 0 if you’ll set via CLI
-            // ⬇️ Ensure ffmpeg exists (download & install to C:\ffmpeg if missing)
+
+            bool graceActive;
+            using (var gracePeriodClient = new GracePeriodClient())
+            {
+                graceActive = gracePeriodClient.IsActiveAsync().GetAwaiter().GetResult();
+            }
+
+            if (!graceActive)
+            {
+                AuthorizationResult authorization;
+                using (var agentClient = new AgentClient())
+                {
+                    authorization = agentClient.AuthorizeAsync().GetAwaiter().GetResult();
+                }
+
+                if (authorization.Status != AuthorizationStatus.Allowed)
+                {
+                    MessageBox.Show(
+                        authorization.Message,
+                        "RENDERDOCK Licensing",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
             FfmpegBootstrap.EnsurePresentOrOffer();
             Application.Run(new BKE_RenderDock());
         }
