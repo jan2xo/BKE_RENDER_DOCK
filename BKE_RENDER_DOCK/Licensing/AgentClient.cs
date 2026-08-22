@@ -29,9 +29,11 @@ namespace BKE_MediaTools.Licensing
             CancellationToken cancellationToken = default)
         {
             ProductManifest manifest;
+            string installationId;
             try
             {
                 manifest = LoadManifest();
+                installationId = InstallationIdentity.GetOrCreate();
             }
             catch (Exception ex) when (
                 ex is IOException ||
@@ -41,14 +43,14 @@ namespace BKE_MediaTools.Licensing
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.InvalidResponse,
-                    "RENDERDOCK product identity is missing or invalid.");
+                    "RENDERDOCK product or installation identity is missing or invalid.");
             }
 
             var request = new AuthorizationRequest
             {
                 ProductId = manifest.ProductId,
                 Version = manifest.Version,
-                InstallationId = Guid.NewGuid().ToString("D")
+                InstallationId = installationId
             };
 
             try
