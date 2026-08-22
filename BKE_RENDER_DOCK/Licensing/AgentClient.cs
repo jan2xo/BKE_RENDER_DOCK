@@ -16,13 +16,25 @@ namespace BKE_MediaTools.Licensing
             new Uri("http://127.0.0.1:43873/v1/authorize", UriKind.Absolute);
 
         private readonly HttpClient _httpClient;
+        private readonly string _manifestPath;
+        private readonly Func<string> _installationIdProvider;
 
         internal AgentClient()
+            : this(
+                new HttpClient { Timeout = TimeSpan.FromSeconds(3) },
+                Path.Combine(AppContext.BaseDirectory, "bke.manifest.json"),
+                InstallationIdentity.GetOrCreate)
         {
-            _httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(3)
-            };
+        }
+
+        internal AgentClient(
+            HttpClient httpClient,
+            string manifestPath,
+            Func<string> installationIdProvider)
+        {
+            _httpClient = httpClient;
+            _manifestPath = manifestPath;
+            _installationIdProvider = installationIdProvider;
         }
 
         internal async Task<AuthorizationResult> AuthorizeAsync(
@@ -32,8 +44,8 @@ namespace BKE_MediaTools.Licensing
             string installationId;
             try
             {
-                manifest = LoadManifest();
-                installationId = InstallationIdentity.GetOrCreate();
+                manifest = LoadManifest(_manifestPath);
+                installationId = _installationIdProvider();
             }
             catch (Exception ex) when (
                 ex is IOException ||
@@ -88,7 +100,7 @@ namespace BKE_MediaTools.Licensing
                         "Render Dock is authorized.");
                 }
 
-                return MapDenial(decision.Reason);
+                return MapDenial(decision.Reason, decision.LicenseCenterUrl);
             }
             catch (OperationCanceledException)
             {
@@ -121,13 +133,17 @@ namespace BKE_MediaTools.Licensing
             _httpClient.Dispose();
         }
 
-        private static AuthorizationResult MapDenial(string reason)
+        private static AuthorizationResult MapDenial(string reason, string? licenseCenterUrl)
         {
             if (string.Equals(reason, "activation_required", StringComparison.OrdinalIgnoreCase))
             {
+                var trustedLicenseCenterUrl = ParseAgentOwnedLicenseCenterUrl(licenseCenterUrl);
                 return new AuthorizationResult(
                     AuthorizationStatus.ActivationRequired,
-                    "Render Dock requires activation. Open the Licensing Agent License Center.");
+                    trustedLicenseCenterUrl == null
+                        ? "Render Dock requires activation, but the Licensing Agent did not provide a valid License Center address."
+                        : "Render Dock requires activation. Open the Licensing Agent License Center.",
+                    trustedLicenseCenterUrl);
             }
 
             if (string.Equals(reason, "unsupported", StringComparison.OrdinalIgnoreCase) ||
@@ -144,9 +160,22 @@ namespace BKE_MediaTools.Licensing
                 "The Licensing Agent denied Render Dock startup.");
         }
 
-        private static ProductManifest LoadManifest()
+        private static Uri? ParseAgentOwnedLicenseCenterUrl(string? value)
         {
-            var manifestPath = Path.Combine(AppContext.BaseDirectory, "bke.manifest.json");
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                uri.Scheme != Uri.UriSchemeHttp ||
+                uri.Host != "127.0.0.1" ||
+                uri.Port != 43873 ||
+                !string.IsNullOrEmpty(uri.UserInfo))
+            {
+                return null;
+            }
+
+            return uri;
+        }
+
+        private static ProductManifest LoadManifest(string manifestPath)
+        {
             var json = File.ReadAllText(manifestPath);
             var manifest = JsonSerializer.Deserialize<ProductManifest>(json);
 
@@ -210,6 +239,9 @@ namespace BKE_MediaTools.Licensing
 
             [JsonPropertyName("reason")]
             public string Reason { get; set; } = string.Empty;
+
+            [JsonPropertyName("license_center_url")]
+            public string? LicenseCenterUrl { get; set; }
         }
     }
 }

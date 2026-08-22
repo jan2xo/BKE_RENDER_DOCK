@@ -12,14 +12,20 @@ namespace BKE_MediaTools.Licensing
 
     internal sealed class AuthorizationResult
     {
-        internal AuthorizationResult(AuthorizationStatus status, string message)
+        internal AuthorizationResult(
+            AuthorizationStatus status,
+            string message,
+            Uri? licenseCenterUrl = null)
         {
             Status = status;
             Message = message;
+            LicenseCenterUrl = licenseCenterUrl;
         }
 
         internal AuthorizationStatus Status { get; }
 
         internal string Message { get; }
+
+        internal Uri? LicenseCenterUrl { get; }
     }
 }
