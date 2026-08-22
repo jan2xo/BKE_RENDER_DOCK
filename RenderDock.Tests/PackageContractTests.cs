@@ -7,7 +7,7 @@ namespace RenderDock.Tests;
 public sealed class PackageContractTests
 {
     private static readonly string RepositoryRoot = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     [Fact]
     public void ManifestAndApplicationVersionsMatch()

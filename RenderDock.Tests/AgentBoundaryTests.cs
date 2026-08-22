@@ -73,7 +73,7 @@ public sealed class AgentBoundaryTests
 
     private static AgentClient CreateClient(HttpClient httpClient)
     {
-        var manifest = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "BKE_RENDER_DOCK", "bke.manifest.json"));
+        var manifest = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "BKE_RENDER_DOCK", "bke.manifest.json"));
         return new AgentClient(httpClient, manifest, () => "d06b6709-83e4-4128-8ec4-f6b473a11c98");
     }
 
