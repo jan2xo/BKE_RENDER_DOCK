@@ -38,8 +38,19 @@ SANE & BEAST. A lightweight Windows tool for rapid media output with smart path 
 
 ### From command line (PowerShell)
 ```powershell
-# Run normally
-& ".\RENDER DOCK.exe"
+# Deterministic production publish
+dotnet publish ".\BKE_RENDER_DOCK\RENDER DOCK.csproj" `
+  --configuration Release --runtime win-x64 --self-contained true `
+  --output ".\artifacts\publish\win-x64"
+
+# Verify the published executable and package contract
+& ".\artifacts\publish\win-x64\RENDER DOCK.exe" --package-smoke
+```
+
+The Windows workflow compiles the verified publish directory with Inno Setup as
+`Render-Dock-1.0.0-Windows-x64.exe`. The installer owns only Render Dock files
+under `C:\Program Files\BKE Digital Solutions\Render Dock`; Licensing Agent
+discovery and authoritative licensing state remain Agent-owned.
 
 
 
