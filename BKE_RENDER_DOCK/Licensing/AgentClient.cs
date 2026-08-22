@@ -43,7 +43,7 @@ namespace BKE_MediaTools.Licensing
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.InvalidResponse,
-                    "RENDERDOCK product or installation identity is missing or invalid.");
+                    "Render Dock product or installation identity is missing or invalid.");
             }
 
             var request = new AuthorizationRequest
@@ -66,7 +66,7 @@ namespace BKE_MediaTools.Licensing
                 {
                     return new AuthorizationResult(
                         AuthorizationStatus.InvalidResponse,
-                        "The BKE Licensing Agent returned an invalid authorization response.");
+                        "The Licensing Agent returned an invalid authorization response.");
                 }
 
                 var responseJson = await response.Content.ReadAsStringAsync()
@@ -78,14 +78,14 @@ namespace BKE_MediaTools.Licensing
                 {
                     return new AuthorizationResult(
                         AuthorizationStatus.InvalidResponse,
-                        "The BKE Licensing Agent returned an invalid authorization response.");
+                        "The Licensing Agent returned an invalid authorization response.");
                 }
 
                 if (decision.Authorized.Value)
                 {
                     return new AuthorizationResult(
                         AuthorizationStatus.Allowed,
-                        "RENDERDOCK is authorized.");
+                        "Render Dock is authorized.");
                 }
 
                 return MapDenial(decision.Reason);
@@ -94,19 +94,19 @@ namespace BKE_MediaTools.Licensing
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.AgentUnavailable,
-                    "The BKE Licensing Agent did not respond in time.");
+                    "The Licensing Agent did not respond in time.");
             }
             catch (HttpRequestException)
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.AgentUnavailable,
-                    "The BKE Licensing Agent is unavailable.");
+                    "The Licensing Agent is unavailable.");
             }
             catch (JsonException)
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.InvalidResponse,
-                    "The BKE Licensing Agent returned malformed data.");
+                    "The Licensing Agent returned malformed data.");
             }
             catch (Exception)
             {
@@ -127,7 +127,7 @@ namespace BKE_MediaTools.Licensing
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.ActivationRequired,
-                    "RENDERDOCK requires activation. Open the BKE Licensing Agent License Center.");
+                    "Render Dock requires activation. Open the Licensing Agent License Center.");
             }
 
             if (string.Equals(reason, "unsupported", StringComparison.OrdinalIgnoreCase) ||
@@ -136,12 +136,12 @@ namespace BKE_MediaTools.Licensing
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.Unsupported,
-                    "This RENDERDOCK product or version is not supported.");
+                    "This Render Dock product or version is not supported.");
             }
 
             return new AuthorizationResult(
                 AuthorizationStatus.Denied,
-                "The BKE Licensing Agent denied RENDERDOCK startup.");
+                "The Licensing Agent denied Render Dock startup.");
         }
 
         private static ProductManifest LoadManifest()
@@ -152,12 +152,12 @@ namespace BKE_MediaTools.Licensing
 
             if (manifest == null ||
                 manifest.SchemaVersion != 1 ||
-                !string.Equals(manifest.ProductId, "renderdock", StringComparison.Ordinal) ||
-                !string.Equals(manifest.DisplayName, "RENDERDOCK", StringComparison.Ordinal) ||
+                !string.Equals(manifest.ProductId, "bke-render-dock", StringComparison.Ordinal) ||
+                !string.Equals(manifest.DisplayName, "Render Dock", StringComparison.Ordinal) ||
                 !string.Equals(manifest.EntryPoint, "RENDER DOCK.exe", StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(manifest.Version))
             {
-                throw new InvalidDataException("Invalid RENDERDOCK manifest.");
+                throw new InvalidDataException("Invalid Render Dock manifest.");
             }
 
             var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
@@ -167,7 +167,7 @@ namespace BKE_MediaTools.Licensing
 
             if (!string.Equals(manifest.Version, canonicalVersion, StringComparison.Ordinal))
             {
-                throw new InvalidDataException("Manifest version does not match RENDERDOCK.");
+                throw new InvalidDataException("Manifest version does not match Render Dock.");
             }
 
             return manifest;

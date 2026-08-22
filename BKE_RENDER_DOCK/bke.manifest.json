@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "productId": "renderdock",
-  "displayName": "RENDERDOCK",
+  "productId": "bke-render-dock",
+  "displayName": "Render Dock",
   "version": "1.0.0",
   "entryPoint": "RENDER DOCK.exe",
   "updateChannel": "stable",
