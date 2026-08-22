@@ -36,8 +36,12 @@ jobs:
       - name: Smoke-test published executable and contract
         shell: pwsh
         run: |
-          & "artifacts/publish/win-x64/RENDER DOCK.exe" --package-smoke
-          if ($LASTEXITCODE -ne 0) { throw "Published package smoke failed." }
+          $smoke = Start-Process `
+            -FilePath "artifacts/publish/win-x64/RENDER DOCK.exe" `
+            -ArgumentList "--package-smoke" `
+            -Wait `
+            -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Published package smoke failed." }
           $manifest = Get-Content "artifacts/publish/win-x64/bke.manifest.json" -Raw | ConvertFrom-Json
           if ($manifest.productId -ne "bke-render-dock" -or $manifest.version -ne "1.0.0" -or $manifest.entryPoint -ne "RENDER DOCK.exe") {
             throw "Published manifest is not canonical."
