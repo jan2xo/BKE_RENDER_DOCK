@@ -27,7 +27,11 @@ internal sealed class AgentRecoveryDialog : Form
         Controls.AddRange(new Control[] { title, body, download, close });
     }
 
-    internal static void ShowRecovery() => using (var dialog = new AgentRecoveryDialog()) dialog.ShowDialog();
+    internal static void ShowRecovery()
+    {
+        using var dialog = new AgentRecoveryDialog();
+        dialog.ShowDialog();
+    }
 
     private static bool OpenRecoveryPage()
     {
