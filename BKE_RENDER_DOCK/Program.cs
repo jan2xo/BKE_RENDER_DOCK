@@ -38,7 +38,7 @@ namespace BKE_MediaTools
                 {
                     MessageBox.Show(
                         authorization.Message,
-                        "RENDERDOCK Licensing",
+                        "Render Dock Licensing",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
                     return;
