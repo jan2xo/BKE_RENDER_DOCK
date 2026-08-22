@@ -88,7 +88,7 @@ namespace BKE_MediaTools.Licensing
                         "Render Dock is authorized.");
                 }
 
-                return MapDenial(decision.Reason);
+                return MapDenial(decision.Reason, decision.LicenseCenterUrl);
             }
             catch (OperationCanceledException)
             {
@@ -121,13 +121,14 @@ namespace BKE_MediaTools.Licensing
             _httpClient.Dispose();
         }
 
-        private static AuthorizationResult MapDenial(string reason)
+        private static AuthorizationResult MapDenial(string reason, string? licenseCenterUrl)
         {
             if (string.Equals(reason, "activation_required", StringComparison.OrdinalIgnoreCase))
             {
                 return new AuthorizationResult(
                     AuthorizationStatus.ActivationRequired,
-                    "Render Dock requires activation. Open the Licensing Agent License Center.");
+                    "Render Dock requires activation. Open the Licensing Agent License Center.",
+                    licenseCenterUrl);
             }
 
             if (string.Equals(reason, "unsupported", StringComparison.OrdinalIgnoreCase) ||
@@ -210,6 +211,9 @@ namespace BKE_MediaTools.Licensing
 
             [JsonPropertyName("reason")]
             public string Reason { get; set; } = string.Empty;
+
+            [JsonPropertyName("license_center_url")]
+            public string? LicenseCenterUrl { get; set; }
         }
     }
 }

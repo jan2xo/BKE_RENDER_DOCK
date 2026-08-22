@@ -1,0 +1,43 @@
+name: Render Dock Windows installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+      - name: Publish Render Dock
+        shell: pwsh
+        run: .\packaging\windows\publish.ps1
+      - name: Validate published identity
+        shell: pwsh
+        run: |
+          $manifest = Get-Content .\packaging\windows\publish\bke.manifest.json | ConvertFrom-Json
+          if ($manifest.productId -ne 'bke-render-dock' -or $manifest.displayName -ne 'Render Dock' -or $manifest.version -ne '1.0.0') { throw 'Invalid canonical manifest.' }
+          if (-not (Test-Path '.\packaging\windows\publish\RENDER DOCK.exe')) { throw 'Missing published entry point.' }
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+      - name: Build installer
+        shell: pwsh
+        run: iscc .\packaging\windows\render-dock.iss
+      - name: Hash installer
+        shell: pwsh
+        run: |
+          $artifact = Get-Item .\packaging\windows\artifacts\Render-Dock-1.0.0-Windows-x64.exe
+          $hash = (Get-FileHash $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "Render-Dock-1.0.0-Windows-x64.exe SHA-256 $hash" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-Dock-1.0.0-Windows-x64
+          path: packaging/windows/artifacts/Render-Dock-1.0.0-Windows-x64.exe

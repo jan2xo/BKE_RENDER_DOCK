@@ -1,4 +1,5 @@
 using BKE_MediaTools.Licensing;
+using System.Diagnostics;
 using static BKE_MediaTools.BKE_RenderDock;
 
 namespace BKE_MediaTools
@@ -34,11 +35,35 @@ namespace BKE_MediaTools
                     authorization = agentClient.AuthorizeAsync().GetAwaiter().GetResult();
                 }
 
-            if (authorization.Status == AuthorizationStatus.AgentUnavailable)
-            {
-                AgentRecoveryDialog.ShowRecovery();
-                return;
-            }
+                if (authorization.Status == AuthorizationStatus.AgentUnavailable)
+                {
+                    AgentRecoveryDialog.ShowRecovery();
+                    return;
+                }
+
+                if (authorization.Status == AuthorizationStatus.ActivationRequired)
+                {
+                    if (!string.IsNullOrWhiteSpace(authorization.LicenseCenterUrl))
+                    {
+                        try
+                        {
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = authorization.LicenseCenterUrl,
+                                UseShellExecute = true
+                            });
+                        }
+                        catch (Exception)
+                        {
+                            MessageBox.Show(authorization.Message, "Render Dock Licensing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show(authorization.Message, "Render Dock Licensing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    return;
+                }
 
             if (authorization.Status != AuthorizationStatus.Allowed)
                 {
