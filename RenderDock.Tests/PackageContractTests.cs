@@ -60,6 +60,35 @@ public sealed class PackageContractTests
         Assert.DoesNotContain("signed lease", combined, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void EnterpriseModeRequiresAgentChildRendezvousNotCliAuthority()
+    {
+        var client = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "EnterpriseSessionClient.cs"));
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+
+        Assert.Contains("operation = \"redeem\"", client);
+        Assert.Contains("NamedPipeClientStream", client);
+        Assert.Contains("TryRedeemAsync", program);
+        Assert.DoesNotContain("--air-stack", client, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("--enterprise", client, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Environment.GetCommandLineArgs", client, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Environment.GetCommandLineArgs", program, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void StandaloneLicensingRemainsFallbackWhenEnterpriseRedemptionFails()
+    {
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+
+        var redeem = program.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
+        var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
+        var standalone = program.IndexOf("AuthorizeAsync", StringComparison.Ordinal);
+        Assert.True(redeem >= 0 && fallback > redeem && standalone > fallback);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
