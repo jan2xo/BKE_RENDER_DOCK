@@ -20,34 +20,46 @@ namespace BKE_MediaTools
 
             ApplicationConfiguration.Initialize();
 
-            bool graceActive;
-            using (var gracePeriodClient = new GracePeriodClient())
+            bool enterpriseSession;
+            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
             {
-                graceActive = gracePeriodClient.IsActiveAsync().GetAwaiter().GetResult();
+                enterpriseSession = new EnterpriseSessionClient()
+                    .TryRedeemAsync(timeout.Token)
+                    .GetAwaiter()
+                    .GetResult();
             }
 
-            if (!graceActive)
+            if (!enterpriseSession)
             {
-                AuthorizationResult authorization;
-                using (var agentClient = new AgentClient())
+                bool graceActive;
+                using (var gracePeriodClient = new GracePeriodClient())
                 {
-                    authorization = agentClient.AuthorizeAsync().GetAwaiter().GetResult();
+                    graceActive = gracePeriodClient.IsActiveAsync().GetAwaiter().GetResult();
                 }
 
-            if (authorization.Status == AuthorizationStatus.AgentUnavailable)
-            {
-                AgentRecoveryDialog.ShowRecovery();
-                return;
-            }
-
-            if (authorization.Status != AuthorizationStatus.Allowed)
+                if (!graceActive)
                 {
-                    MessageBox.Show(
-                        authorization.Message,
-                        "Render Dock Licensing",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-                    return;
+                    AuthorizationResult authorization;
+                    using (var agentClient = new AgentClient())
+                    {
+                        authorization = agentClient.AuthorizeAsync().GetAwaiter().GetResult();
+                    }
+
+                    if (authorization.Status == AuthorizationStatus.AgentUnavailable)
+                    {
+                        AgentRecoveryDialog.ShowRecovery();
+                        return;
+                    }
+
+                    if (authorization.Status != AuthorizationStatus.Allowed)
+                    {
+                        MessageBox.Show(
+                            authorization.Message,
+                            "Render Dock Licensing",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                        return;
+                    }
                 }
             }
 
