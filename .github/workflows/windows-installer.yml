@@ -1,0 +1,55 @@
+name: Render Dock Windows installer
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up .NET 6
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Test package contracts
+        run: dotnet test "RenderDock.Tests/RenderDock.Tests.csproj" --configuration Release
+
+      - name: Publish self-contained Windows x64 application
+        shell: pwsh
+        run: .\packaging\windows\publish.ps1
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Compile Windows installer
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging/windows/render-dock.iss"'
+
+      - name: Hash installer
+        shell: pwsh
+        run: |
+          $installer = "artifacts/installer/Render-Dock-1.0.0-Windows-x64.exe"
+          if (-not (Test-Path $installer)) { throw "Installer was not produced." }
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Render-Dock-1.0.0-Windows-x64.exe" | Set-Content "artifacts/installer/SHA256SUMS"
+          "Render-Dock-1.0.0-Windows-x64.exe SHA-256 $hash" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Render-Dock-1.0.0-Windows-x64
+          path: |
+            artifacts/installer/Render-Dock-1.0.0-Windows-x64.exe
+            artifacts/installer/SHA256SUMS
+          if-no-files-found: error
