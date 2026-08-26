@@ -12,15 +12,25 @@ namespace BKE_MediaTools.Licensing
         {
             var client = new AgentUpdateClient();
             form.FormClosed += (_, __) => client.Dispose();
-            var status = await client.StatusAsync();
-            if (status == null || form.IsDisposed) return;
-            if (status.State == "never_checked")
+            try
             {
-                await client.QueueRefreshAsync(status);
-                return;
+                var status = await client.StatusAsync();
+                if (status == null || form.IsDisposed) return;
+                if (status.State == "never_checked")
+                {
+                    await client.QueueRefreshAsync(status);
+                    for (var attempt = 0; attempt < 30 && !form.IsDisposed; attempt++)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(1));
+                        status = await client.StatusAsync();
+                        if (status == null || status.State == "refresh_failed" || status.State == "verification_failed") return;
+                        if (status.Available) break;
+                    }
+                }
+                if (!status.Available) return;
+                form.BeginInvoke(new Action(() => ShowDialog(form, client, status)));
             }
-            if (!status.Available) return;
-            form.BeginInvoke(new Action(() => ShowDialog(form, client, status)));
+            catch { /* Update discovery must never escape the post-startup UI event. */ }
         }
 
         private static void ShowDialog(Form owner, AgentUpdateClient client, AgentUpdateStatus status)
@@ -58,4 +68,3 @@ namespace BKE_MediaTools.Licensing
         }
     }
 }
-
