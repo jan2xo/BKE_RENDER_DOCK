@@ -64,7 +64,9 @@ namespace BKE_MediaTools
             }
 
             FfmpegBootstrap.EnsurePresentOrOffer();
-            Application.Run(new BKE_RenderDock());
+            var mainForm = new BKE_RenderDock();
+            AgentUpdateCoordinator.Attach(mainForm, enterpriseSession);
+            Application.Run(mainForm);
         }
     }
 }

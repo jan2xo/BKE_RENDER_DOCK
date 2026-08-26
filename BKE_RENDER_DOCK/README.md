@@ -1,5 +1,9 @@
 # Render Dock (Windows)
 
+## Update notifications
+
+Standalone Render Dock checks only the local Licensing Agent after its main form is shown and may display native Update/Later UI for `bke-render-dock`. When the existing Agent-authenticated Air Stack enterprise session is redeemed, Render Dock suppresses its prominent update prompt so Air Stack owns the bundled-component surface. Render Dock never contacts Digital Solutions, downloads an updater artifact, or invokes Updater Core directly.
+
 SANE & BEAST. A lightweight Windows tool for rapid media output with smart path handling, one-click navigation, and shared licensing authorization.
 
 ---
