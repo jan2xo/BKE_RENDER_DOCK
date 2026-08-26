@@ -24,7 +24,7 @@ namespace BKE_MediaTools.Licensing
                         await Task.Delay(TimeSpan.FromSeconds(1));
                         status = await client.StatusAsync();
                         if (status == null || status.State == "refresh_failed" || status.State == "verification_failed") return;
-                        if (status.Available) break;
+                        if (status.Available || status.State == "suppressed_update") break;
                     }
                 }
                 if (!status.Available) return;
@@ -47,6 +47,13 @@ namespace BKE_MediaTools.Licensing
             var message = new Label { Left = 20, Top = 20, Width = 390, Height = 50, Text = $"Render Dock {status.LatestVersion} is available. Rendering can continue while you decide." };
             var later = new Button { Text = "Later", Left = 238, Top = 94, Width = 80, DialogResult = DialogResult.Cancel };
             var update = new Button { Text = "Update", Left = 326, Top = 94, Width = 80 };
+            later.Click += async (_, __) =>
+            {
+                later.Enabled = false;
+                try { await client.DismissAsync(status); }
+                catch { /* Dismissal failure must not interfere with Render Dock. */ }
+                dialog.Close();
+            };
             update.Click += async (_, __) =>
             {
                 update.Enabled = false;

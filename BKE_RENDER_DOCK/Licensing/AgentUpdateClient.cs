@@ -30,6 +30,17 @@ namespace BKE_MediaTools.Licensing
             await PostAsync("v1/updates/refresh", new { product_id = status.ProductId, version = status.CurrentVersion }, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
         }
 
+        internal async Task DismissAsync(AgentUpdateStatus status, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(status.CurrentVersion) || string.IsNullOrWhiteSpace(status.LatestVersion)) return;
+            await PostAsync("v1/updates/dismiss", new
+            {
+                product_id = status.ProductId,
+                version = status.CurrentVersion,
+                latest_version = status.LatestVersion
+            }, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+        }
+
         internal async Task<string> OpenCenterAsync(AgentUpdateStatus status, CancellationToken cancellationToken = default)
         {
             var correlation = Guid.NewGuid().ToString("N");
@@ -67,4 +78,3 @@ namespace BKE_MediaTools.Licensing
         [JsonPropertyName("correlation_id")] public string CorrelationId { get; set; } = string.Empty;
     }
 }
-
