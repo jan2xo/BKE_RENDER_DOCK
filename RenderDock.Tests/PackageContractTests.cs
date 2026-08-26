@@ -89,6 +89,21 @@ public sealed class PackageContractTests
         Assert.True(redeem >= 0 && fallback > redeem && standalone > fallback);
     }
 
+    [Fact]
+    public void EnterpriseSessionSuppressesProminentProductUpdatePrompt()
+    {
+        var program = File.ReadAllText(Path.Combine(RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var coordinator = File.ReadAllText(Path.Combine(RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentUpdateCoordinator.cs"));
+        var client = File.ReadAllText(Path.Combine(RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentUpdateClient.cs"));
+        Assert.Contains("Attach(mainForm, enterpriseSession)", program);
+        Assert.Contains("if (enterpriseSession) return", coordinator);
+        Assert.Contains("form.Shown", coordinator);
+        Assert.Contains("127.0.0.1:43873", client);
+        Assert.DoesNotContain("jl-bke.com", client, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("download_url", client, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bke-updater-core", client, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
