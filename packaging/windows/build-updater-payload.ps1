@@ -23,9 +23,9 @@ $stream = [System.IO.File]::Open($payloadPath, [System.IO.FileMode]::CreateNew)
 try {
     $archive = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
     try {
-        $files = Get-ChildItem -LiteralPath $PublishDirectory -Recurse -File | Sort-Object { $_.FullName.Substring($PublishDirectory.Length).Replace('\\','/') }
+        $files = Get-ChildItem -LiteralPath $PublishDirectory -Recurse -File | Sort-Object { $_.FullName.Substring($PublishDirectory.Length).Replace('\','/') }
         foreach ($file in $files) {
-            $relative = $file.FullName.Substring($PublishDirectory.Length).TrimStart('\\','/').Replace('\\','/')
+            $relative = ($file.FullName.Substring($PublishDirectory.Length) -replace '^[\\/]+', '').Replace('\','/')
             if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('..')) { throw "Unsafe updater payload path: $relative" }
             $entry = $archive.CreateEntry($relative, [System.IO.Compression.CompressionLevel]::Optimal)
             $entry.LastWriteTime = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
