@@ -2,13 +2,17 @@ name: Render Dock Windows installer
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-installer:
+    if: github.event_name != 'push' || startsWith(github.event.head_commit.message, 'Release Render Dock 1.0.0.1')
     runs-on: windows-latest
     steps:
       - name: Check out exact source
@@ -28,6 +32,18 @@ jobs:
           if (-not (Test-Path -LiteralPath $package)) { throw 'Certified BKE Desktop Licensing package is missing.' }
           $hash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne '30cae81ecbbf0f452019e987ba09d5755212e6dcac343f1f603b83988a80eeec') { throw "Unexpected BKE Desktop Licensing package hash: $hash" }
+
+      - name: Verify release version contract
+        shell: pwsh
+        run: |
+          $project = Get-Content "BKE_RENDER_DOCK/RENDER DOCK.csproj" -Raw
+          $manifest = Get-Content "BKE_RENDER_DOCK/bke.manifest.json" -Raw | ConvertFrom-Json
+          $installer = Get-Content "packaging/windows/render-dock.iss" -Raw
+          $payload = Get-Content "packaging/windows/build-updater-payload.ps1" -Raw
+          if ($project -notmatch '<Version>1\.0\.0\.1</Version>') { throw 'Project version is not 1.0.0.1.' }
+          if ($manifest.version -ne '1.0.0.1') { throw 'Manifest version is not 1.0.0.1.' }
+          if ($installer -notmatch '#define ProductVersion "1\.0\.0\.1"') { throw 'Installer version is not 1.0.0.1.' }
+          if (-not $payload.Contains("[string]`$Version = '1.0.0.1'")) { throw 'Updater payload version is not 1.0.0.1.' }
 
       - name: Verify licensing integration boundaries
         shell: pwsh
@@ -74,28 +90,78 @@ jobs:
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging/windows/render-dock.iss"'
 
-      - name: Hash installer
+      - name: Hash release artifacts
         shell: pwsh
         run: |
-          $installer = "artifacts/installer/Render-Dock-1.0.0-Windows-x64.exe"
-          if (-not (Test-Path $installer)) { throw "Installer was not produced." }
-          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  Render-Dock-1.0.0-Windows-x64.exe" | Set-Content "artifacts/installer/SHA256SUMS"
-          "Render-Dock-1.0.0-Windows-x64.exe SHA-256 $hash" >> $env:GITHUB_STEP_SUMMARY
+          $files = @(
+            "artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.exe",
+            "artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.zip",
+            "artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.json"
+          )
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Release artifact was not produced: $file" }
+          }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            $name = Split-Path -Leaf $file
+            "$hash  $name"
+          }
+          $lines | Set-Content "artifacts/installer/SHA256SUMS"
+          $lines | ForEach-Object { "$_" >> $env:GITHUB_STEP_SUMMARY }
 
       - name: Verify updater payload metadata
         shell: pwsh
         run: |
-          $metadata = Get-Content -LiteralPath 'artifacts/installer/Render-Dock-1.0.0-Windows-x64.update.json' -Raw | ConvertFrom-Json
-          if ($metadata.schema -ne 'bke.update-package.v1' -or $metadata.productId -ne 'bke-render-dock' -or $metadata.entryPoint -ne 'RENDER DOCK.exe' -or $metadata.contentType -ne 'application/vnd.bke.update-package+zip') { throw 'Updater payload metadata contract invalid.' }
+          $metadata = Get-Content -LiteralPath 'artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.json' -Raw | ConvertFrom-Json
+          if ($metadata.schema -ne 'bke.update-package.v1' -or
+              $metadata.productId -ne 'bke-render-dock' -or
+              $metadata.version -ne '1.0.0.1' -or
+              $metadata.entryPoint -ne 'RENDER DOCK.exe' -or
+              $metadata.contentType -ne 'application/vnd.bke.update-package+zip') {
+            throw 'Updater payload metadata contract invalid.'
+          }
+          $payloadHash = (Get-FileHash -LiteralPath 'artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($metadata.sha256 -ne $payloadHash) { throw 'Updater payload metadata hash does not match the updater ZIP.' }
 
       - name: Upload installer and updater artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Render-Dock-1.0.0-Windows-x64
+          name: Render-Dock-1.0.0.1-Windows-x64
           path: |
-            artifacts/installer/Render-Dock-1.0.0-Windows-x64.exe
+            artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.exe
             artifacts/installer/SHA256SUMS
-            artifacts/installer/Render-Dock-1.0.0-Windows-x64.update.zip
-            artifacts/installer/Render-Dock-1.0.0-Windows-x64.update.json
+            artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.zip
+            artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.json
           if-no-files-found: error
+
+      - name: Publish GitHub release 1.0.0.1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'v1.0.0.1'
+          $repo = '${{ github.repository }}'
+          gh release view $tag --repo $repo *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists; leaving existing release unchanged."
+            exit 0
+          }
+          $notesPath = Join-Path $env:RUNNER_TEMP 'render-dock-1.0.0.1-release-notes.md'
+          @'
+          Render Dock 1.0.0.1
+
+          First Render Dock release prepared specifically for end-to-end BKE Updater Core certification from installed 1.0.0 to 1.0.0.1.
+
+          Assets include the Windows installer, deterministic updater payload ZIP, updater metadata, and SHA-256 evidence.
+          '@ | Set-Content -LiteralPath $notesPath
+          gh release create $tag `
+            --repo $repo `
+            --target $env:GITHUB_SHA `
+            --title 'Render Dock 1.0.0.1' `
+            --notes-file $notesPath `
+            'artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.exe' `
+            'artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.zip' `
+            'artifacts/installer/Render-Dock-1.0.0.1-Windows-x64.update.json' `
+            'artifacts/installer/SHA256SUMS'
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed.' }
