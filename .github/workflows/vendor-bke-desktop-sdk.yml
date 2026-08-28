@@ -1,0 +1,42 @@
+name: Vendor BKE Desktop SDK v1.0.0
+
+on:
+  push:
+    branches: [ feat/desktop-sdk-v1-integration ]
+    paths:
+      - .github/workflows/vendor-bke-desktop-sdk.yml
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/desktop-sdk-v1-integration
+
+      - name: Download exact released SDK package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p packages
+          curl -fL --retry 3 \
+            https://github.com/jan2xo/bke-desktop-sdk/releases/download/v1.0.0/BKE.Desktop.Client.1.0.0.nupkg \
+            -o packages/BKE.Desktop.Client.1.0.0.nupkg
+          echo '9cd80194bc0ddb5f1f983143d37282f470cfb7772e41fa2d9df691f48425071e  packages/BKE.Desktop.Client.1.0.0.nupkg' | sha256sum -c -
+
+      - name: Commit certified package to integration branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add packages/BKE.Desktop.Client.1.0.0.nupkg
+          if git diff --cached --quiet; then
+            echo 'Package already vendored.'
+            exit 0
+          fi
+          git commit -m 'build: vendor BKE Desktop Client SDK 1.0.0'
+          git push origin HEAD:feat/desktop-sdk-v1-integration
