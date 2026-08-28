@@ -1,0 +1,48 @@
+name: Vendor certified Desktop Licensing package
+
+on:
+  push:
+    branches:
+      - feat/desktop-licensing-native-activation
+    paths:
+      - .github/workflows/vendor-desktop-licensing.yml
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/desktop-licensing-native-activation
+
+      - name: Download exact canonical package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p packages
+          curl -fL --retry 3 \
+            -o packages/BKE.Desktop.Licensing.1.0.0.nupkg \
+            https://github.com/jan2xo/bke-desktop-sdk/releases/download/desktop-licensing-v1.0.0/BKE.Desktop.Licensing.1.0.0.nupkg
+          actual="$(sha256sum packages/BKE.Desktop.Licensing.1.0.0.nupkg | cut -d' ' -f1)"
+          expected="30cae81ecbbf0f452019e987ba09d5755212e6dcac343f1f603b83988a80eeec"
+          test "$actual" = "$expected"
+          unzip -p packages/BKE.Desktop.Licensing.1.0.0.nupkg BKE.Desktop.Licensing.nuspec | grep -q '<id>BKE.Desktop.Licensing</id>'
+          unzip -p packages/BKE.Desktop.Licensing.1.0.0.nupkg BKE.Desktop.Licensing.nuspec | grep -q 'commit="6d7b7a6585e830696fece2e6b57c0e23f0062e6b"'
+
+      - name: Commit verified package
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/BKE.Desktop.Licensing.1.0.0.nupkg
+          if git diff --cached --quiet; then
+            echo "Certified package already vendored."
+            exit 0
+          fi
+          git commit -m "build: vendor BKE.Desktop.Licensing 1.0.0"
+          git push origin HEAD:feat/desktop-licensing-native-activation
