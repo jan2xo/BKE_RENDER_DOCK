@@ -4,7 +4,7 @@ namespace BKE_MediaTools.Licensing
     {
         Allowed,
         Denied,
-        ActivationRequired,
+        Cancelled,
         AgentUnavailable,
         Unsupported,
         InvalidResponse

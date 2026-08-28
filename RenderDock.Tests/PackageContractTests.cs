@@ -61,7 +61,7 @@ public sealed class PackageContractTests
     }
 
     [Fact]
-    public void StandaloneAuthorizationUsesReleasedDesktopSdk()
+    public void StandaloneAuthorizationUsesReleasedDesktopLicensingCapability()
     {
         var project = XDocument.Load(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "RENDER DOCK.csproj"));
@@ -69,7 +69,7 @@ public sealed class PackageContractTests
         var sdkReference = project.Descendants("PackageReference")
             .SingleOrDefault(element => string.Equals(
                 element.Attribute("Include")?.Value,
-                "BKE.Desktop.Client",
+                "BKE.Desktop.Licensing",
                 StringComparison.Ordinal));
         var agent = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentClient.cs"));
@@ -77,10 +77,28 @@ public sealed class PackageContractTests
         Assert.Equal("net8.0-windows", targetFramework);
         Assert.NotNull(sdkReference);
         Assert.Equal("1.0.0", sdkReference!.Attribute("Version")?.Value);
-        Assert.Contains("BkeDesktopClient.Create", agent);
+        Assert.Contains("BkeLicensingClient.Create", agent);
+        Assert.Contains("EnsureAuthorizedAsync", agent);
+        Assert.Contains("ActivationInteraction.NativeDesktop", agent);
+        Assert.DoesNotContain("BKE.Desktop.Client", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpClient", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("127.0.0.1:43873", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("/v1/authorize", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("/v1/license-center/open", agent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ActivationRequiredCannotFallBackToWarningOnlyStartupWiring()
+    {
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var agent = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentClient.cs"));
+
+        Assert.Contains("agentClient.EnsureAuthorizedAsync", program);
+        Assert.DoesNotContain("AuthorizationStatus.ActivationRequired", program);
+        Assert.Contains("ActivationInteraction.NativeDesktop", agent);
+        Assert.Contains("SdkAuthorizationStatus.ActivationCancelled", agent);
     }
 
     [Fact]
@@ -108,7 +126,7 @@ public sealed class PackageContractTests
 
         var redeem = program.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
         var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
-        var standalone = program.IndexOf("AuthorizeAsync", StringComparison.Ordinal);
+        var standalone = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
         Assert.True(redeem >= 0 && fallback > redeem && standalone > fallback);
     }
 

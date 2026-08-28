@@ -21,13 +21,13 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Verify certified SDK package
+      - name: Verify certified Desktop Licensing package
         shell: pwsh
         run: |
-          $package = "packages/BKE.Desktop.Client.1.0.0.nupkg"
-          if (-not (Test-Path -LiteralPath $package)) { throw 'Certified BKE Desktop Client SDK package is missing.' }
+          $package = "packages/BKE.Desktop.Licensing.1.0.0.nupkg"
+          if (-not (Test-Path -LiteralPath $package)) { throw 'Certified BKE Desktop Licensing package is missing.' }
           $hash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($hash -ne '9cd80194bc0ddb5f1f983143d37282f470cfb7772e41fa2d9df691f48425071e') { throw "Unexpected BKE Desktop Client SDK package hash: $hash" }
+          if ($hash -ne '30cae81ecbbf0f452019e987ba09d5755212e6dcac343f1f603b83988a80eeec') { throw "Unexpected BKE Desktop Licensing package hash: $hash" }
 
       - name: Verify licensing integration boundaries
         shell: pwsh
@@ -37,9 +37,14 @@ jobs:
           $agent = Get-Content "BKE_RENDER_DOCK/Licensing/AgentClient.cs" -Raw
           $enterprise = Get-Content "BKE_RENDER_DOCK/Licensing/EnterpriseSessionClient.cs" -Raw
           if ($project -notmatch '<TargetFramework>net8\.0-windows</TargetFramework>') { throw '.NET 8 Windows target missing' }
-          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Client" Version="1\.0\.0"') { throw 'BKE Desktop Client SDK reference missing' }
-          if ($agent -notmatch 'BkeDesktopClient\.Create') { throw 'SDK-backed Licensing Agent client missing' }
+          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="1\.0\.0"') { throw 'BKE Desktop Licensing reference missing' }
+          if ($project -match 'PackageReference Include="BKE\.Desktop\.Client"') { throw 'Legacy BKE Desktop Client reference must be removed' }
+          if ($agent -notmatch 'BkeLicensingClient\.Create') { throw 'Desktop Licensing client missing' }
+          if ($agent -notmatch 'EnsureAuthorizedAsync') { throw 'One-shot authorization flow missing' }
+          if ($agent -notmatch 'ActivationInteraction\.NativeDesktop') { throw 'Native desktop activation policy missing' }
           if ($agent -match 'HttpClient|127\.0\.0\.1:43873|/v1/authorize|/v1/license-center/open') { throw 'Direct authorization HTTP transport must not return to Render Dock' }
+          if ($program -notmatch 'agentClient\.EnsureAuthorizedAsync') { throw 'Render Dock startup must use the one-shot licensing flow' }
+          if ($program -match 'AuthorizationStatus\.ActivationRequired') { throw 'ActivationRequired must not degrade to a warning-only Program.cs branch' }
           if ($program -notmatch 'TryRedeemAsync') { throw 'Air Stack enterprise-session redemption missing' }
           if ($enterprise -notmatch 'NamedPipeClientStream') { throw 'Enterprise child rendezvous IPC missing' }
 
@@ -50,11 +55,12 @@ jobs:
         shell: pwsh
         run: .\packaging\windows\publish.ps1
 
-      - name: Verify SDK restore in product
+      - name: Verify Desktop Licensing restore in product
         shell: pwsh
         run: |
           $assets = Get-Content "BKE_RENDER_DOCK/obj/project.assets.json" -Raw
-          if ($assets -notmatch 'BKE\.Desktop\.Client/1\.0\.0') { throw 'BKE Desktop Client SDK 1.0.0 was not restored into Render Dock.' }
+          if ($assets -notmatch 'BKE\.Desktop\.Licensing/1\.0\.0') { throw 'BKE Desktop Licensing 1.0.0 was not restored into Render Dock.' }
+          if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must not remain in Render Dock restore graph.' }
 
       - name: Build verified updater payload candidate
         shell: pwsh
