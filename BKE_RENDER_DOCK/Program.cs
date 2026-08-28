@@ -42,7 +42,12 @@ namespace BKE_MediaTools
                     AuthorizationResult authorization;
                     using (var agentClient = new AgentClient())
                     {
-                        authorization = agentClient.AuthorizeAsync().GetAwaiter().GetResult();
+                        authorization = agentClient.EnsureAuthorizedAsync().GetAwaiter().GetResult();
+                    }
+
+                    if (authorization.Status == AuthorizationStatus.Cancelled)
+                    {
+                        return;
                     }
 
                     if (authorization.Status == AuthorizationStatus.AgentUnavailable)
