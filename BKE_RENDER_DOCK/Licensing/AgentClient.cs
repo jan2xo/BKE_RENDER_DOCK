@@ -1,29 +1,14 @@
-using System;
-using System.IO;
-using System.Net.Http;
+using BKE.Desktop.Client;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
+using SdkAuthorizationStatus = BKE.Desktop.Client.AuthorizationStatus;
 
 namespace BKE_MediaTools.Licensing
 {
     internal sealed class AgentClient : IDisposable
     {
-        private static readonly Uri AuthorizationEndpoint =
-            new Uri("http://127.0.0.1:43873/v1/authorize", UriKind.Absolute);
-
-        private readonly HttpClient _httpClient;
-
-        internal AgentClient()
-        {
-            _httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(3)
-            };
-        }
+        private readonly BkeDesktopClient _client = BkeDesktopClient.Create();
 
         internal async Task<AuthorizationResult> AuthorizeAsync(
             CancellationToken cancellationToken = default)
@@ -46,102 +31,44 @@ namespace BKE_MediaTools.Licensing
                     "Render Dock product or installation identity is missing or invalid.");
             }
 
-            var request = new AuthorizationRequest
+            var result = await _client.AuthorizeAsync(
+                manifest.ProductId,
+                manifest.Version,
+                installationId,
+                cancellationToken).ConfigureAwait(false);
+
+            return result.Status switch
             {
-                ProductId = manifest.ProductId,
-                Version = manifest.Version,
-                InstallationId = installationId
+                SdkAuthorizationStatus.Authorized => new AuthorizationResult(
+                    AuthorizationStatus.Allowed,
+                    "Render Dock is authorized."),
+                SdkAuthorizationStatus.ActivationRequired => new AuthorizationResult(
+                    AuthorizationStatus.ActivationRequired,
+                    "Render Dock requires activation. Open the Licensing Agent License Center."),
+                SdkAuthorizationStatus.AgentUnavailable => new AuthorizationResult(
+                    AuthorizationStatus.AgentUnavailable,
+                    "The Licensing Agent is unavailable."),
+                SdkAuthorizationStatus.Timeout => new AuthorizationResult(
+                    AuthorizationStatus.AgentUnavailable,
+                    "The Licensing Agent did not respond in time."),
+                SdkAuthorizationStatus.Unsupported => new AuthorizationResult(
+                    AuthorizationStatus.Unsupported,
+                    "This Render Dock product or version is not supported."),
+                SdkAuthorizationStatus.Denied => new AuthorizationResult(
+                    AuthorizationStatus.Denied,
+                    "The Licensing Agent denied Render Dock startup."),
+                SdkAuthorizationStatus.ProtocolRejected => new AuthorizationResult(
+                    AuthorizationStatus.InvalidResponse,
+                    "The Licensing Agent rejected the authorization request."),
+                _ => new AuthorizationResult(
+                    AuthorizationStatus.InvalidResponse,
+                    "Authorization could not be verified.")
             };
-
-            try
-            {
-                var json = JsonSerializer.Serialize(request);
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = await _httpClient.PostAsync(
-                    AuthorizationEndpoint,
-                    content,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    return new AuthorizationResult(
-                        AuthorizationStatus.InvalidResponse,
-                        "The Licensing Agent returned an invalid authorization response.");
-                }
-
-                var responseJson = await response.Content.ReadAsStringAsync()
-                    .ConfigureAwait(false);
-                var decision = JsonSerializer.Deserialize<AuthorizationResponse>(responseJson);
-
-                if (decision == null || decision.Authorized == null ||
-                    string.IsNullOrWhiteSpace(decision.Reason))
-                {
-                    return new AuthorizationResult(
-                        AuthorizationStatus.InvalidResponse,
-                        "The Licensing Agent returned an invalid authorization response.");
-                }
-
-                if (decision.Authorized.Value)
-                {
-                    return new AuthorizationResult(
-                        AuthorizationStatus.Allowed,
-                        "Render Dock is authorized.");
-                }
-
-                return MapDenial(decision.Reason);
-            }
-            catch (OperationCanceledException)
-            {
-                return new AuthorizationResult(
-                    AuthorizationStatus.AgentUnavailable,
-                    "The Licensing Agent did not respond in time.");
-            }
-            catch (HttpRequestException)
-            {
-                return new AuthorizationResult(
-                    AuthorizationStatus.AgentUnavailable,
-                    "The Licensing Agent is unavailable.");
-            }
-            catch (JsonException)
-            {
-                return new AuthorizationResult(
-                    AuthorizationStatus.InvalidResponse,
-                    "The Licensing Agent returned malformed data.");
-            }
-            catch (Exception)
-            {
-                return new AuthorizationResult(
-                    AuthorizationStatus.InvalidResponse,
-                    "Authorization could not be verified.");
-            }
         }
 
         public void Dispose()
         {
-            _httpClient.Dispose();
-        }
-
-        private static AuthorizationResult MapDenial(string reason)
-        {
-            if (string.Equals(reason, "activation_required", StringComparison.OrdinalIgnoreCase))
-            {
-                return new AuthorizationResult(
-                    AuthorizationStatus.ActivationRequired,
-                    "Render Dock requires activation. Open the Licensing Agent License Center.");
-            }
-
-            if (string.Equals(reason, "unsupported", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(reason, "unsupported_product", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(reason, "unsupported_version", StringComparison.OrdinalIgnoreCase))
-            {
-                return new AuthorizationResult(
-                    AuthorizationStatus.Unsupported,
-                    "This Render Dock product or version is not supported.");
-            }
-
-            return new AuthorizationResult(
-                AuthorizationStatus.Denied,
-                "The Licensing Agent denied Render Dock startup.");
+            _client.Dispose();
         }
 
         private static ProductManifest LoadManifest()
@@ -189,27 +116,6 @@ namespace BKE_MediaTools.Licensing
 
             [JsonPropertyName("entryPoint")]
             public string EntryPoint { get; set; } = string.Empty;
-        }
-
-        private sealed class AuthorizationRequest
-        {
-            [JsonPropertyName("product_id")]
-            public string ProductId { get; set; } = string.Empty;
-
-            [JsonPropertyName("version")]
-            public string Version { get; set; } = string.Empty;
-
-            [JsonPropertyName("installation_id")]
-            public string InstallationId { get; set; } = string.Empty;
-        }
-
-        private sealed class AuthorizationResponse
-        {
-            [JsonPropertyName("authorized")]
-            public bool? Authorized { get; set; }
-
-            [JsonPropertyName("reason")]
-            public string Reason { get; set; } = string.Empty;
         }
     }
 }

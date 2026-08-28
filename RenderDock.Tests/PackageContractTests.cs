@@ -61,6 +61,29 @@ public sealed class PackageContractTests
     }
 
     [Fact]
+    public void StandaloneAuthorizationUsesReleasedDesktopSdk()
+    {
+        var project = XDocument.Load(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "RENDER DOCK.csproj"));
+        var targetFramework = project.Descendants("TargetFramework").Single().Value;
+        var sdkReference = project.Descendants("PackageReference")
+            .SingleOrDefault(element => string.Equals(
+                element.Attribute("Include")?.Value,
+                "BKE.Desktop.Client",
+                StringComparison.Ordinal));
+        var agent = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentClient.cs"));
+
+        Assert.Equal("net8.0-windows", targetFramework);
+        Assert.NotNull(sdkReference);
+        Assert.Equal("1.0.0", sdkReference!.Attribute("Version")?.Value);
+        Assert.Contains("BkeDesktopClient.Create", agent);
+        Assert.DoesNotContain("HttpClient", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("127.0.0.1:43873", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("/v1/authorize", agent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EnterpriseModeRequiresAgentChildRendezvousNotCliAuthority()
     {
         var client = File.ReadAllText(Path.Combine(
