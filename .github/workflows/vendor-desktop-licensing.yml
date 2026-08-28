@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/BKE.Desktop.Licensing.1.0.0.nupkg
+          git add -f packages/BKE.Desktop.Licensing.1.0.0.nupkg
           if git diff --cached --quiet; then
             echo "Certified package already vendored."
             exit 0
