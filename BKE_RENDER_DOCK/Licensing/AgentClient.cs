@@ -1,16 +1,16 @@
-using BKE.Desktop.Client;
+using BKE.Desktop.Licensing;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SdkAuthorizationStatus = BKE.Desktop.Client.AuthorizationStatus;
+using SdkAuthorizationStatus = BKE.Desktop.Licensing.AuthorizationStatus;
 
 namespace BKE_MediaTools.Licensing
 {
     internal sealed class AgentClient : IDisposable
     {
-        private readonly BkeDesktopClient _client = BkeDesktopClient.Create();
+        private readonly BkeLicensingClient _client = BkeLicensingClient.Create();
 
-        internal async Task<AuthorizationResult> AuthorizeAsync(
+        internal async Task<AuthorizationResult> EnsureAuthorizedAsync(
             CancellationToken cancellationToken = default)
         {
             ProductManifest manifest;
@@ -31,10 +31,14 @@ namespace BKE_MediaTools.Licensing
                     "Render Dock product or installation identity is missing or invalid.");
             }
 
-            var result = await _client.AuthorizeAsync(
+            var result = await _client.EnsureAuthorizedAsync(
                 manifest.ProductId,
                 manifest.Version,
                 installationId,
+                new LicensingFlowOptions
+                {
+                    ActivationInteraction = ActivationInteraction.NativeDesktop
+                },
                 cancellationToken).ConfigureAwait(false);
 
             return result.Status switch
@@ -42,24 +46,27 @@ namespace BKE_MediaTools.Licensing
                 SdkAuthorizationStatus.Authorized => new AuthorizationResult(
                     AuthorizationStatus.Allowed,
                     "Render Dock is authorized."),
-                SdkAuthorizationStatus.ActivationRequired => new AuthorizationResult(
-                    AuthorizationStatus.ActivationRequired,
-                    "Render Dock requires activation. Open the Licensing Agent License Center."),
+                SdkAuthorizationStatus.ActivationCancelled => new AuthorizationResult(
+                    AuthorizationStatus.Cancelled,
+                    "Render Dock activation was cancelled."),
                 SdkAuthorizationStatus.AgentUnavailable => new AuthorizationResult(
                     AuthorizationStatus.AgentUnavailable,
                     "The Licensing Agent is unavailable."),
                 SdkAuthorizationStatus.Timeout => new AuthorizationResult(
                     AuthorizationStatus.AgentUnavailable,
-                    "The Licensing Agent did not respond in time."),
+                    "The Licensing Agent or License Center did not respond in time."),
                 SdkAuthorizationStatus.Unsupported => new AuthorizationResult(
                     AuthorizationStatus.Unsupported,
-                    "This Render Dock product or version is not supported."),
+                    "This Render Dock product, version, or activation presentation is not supported."),
                 SdkAuthorizationStatus.Denied => new AuthorizationResult(
                     AuthorizationStatus.Denied,
                     "The Licensing Agent denied Render Dock startup."),
+                SdkAuthorizationStatus.ActivationRequired => new AuthorizationResult(
+                    AuthorizationStatus.Denied,
+                    "Render Dock activation did not complete."),
                 SdkAuthorizationStatus.ProtocolRejected => new AuthorizationResult(
                     AuthorizationStatus.InvalidResponse,
-                    "The Licensing Agent rejected the authorization request."),
+                    "The Licensing Agent rejected the licensing request."),
                 _ => new AuthorizationResult(
                     AuthorizationStatus.InvalidResponse,
                     "Authorization could not be verified.")
