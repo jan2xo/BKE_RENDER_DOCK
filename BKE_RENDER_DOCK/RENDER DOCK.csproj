@@ -2,17 +2,18 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>BKE_MEDIA_TOOLS</RootNamespace>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <ApplicationIcon>Assets\BKE LOGO.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BKE.Desktop.Licensing" Version="1.0.0" />
+    <PackageReference Include="BKE.Desktop.Licensing" Version="2.0.0" />
+    <PackageReference Include="BKE.Updater" Version="0.4.0" />
   </ItemGroup>
 
   <ItemGroup>

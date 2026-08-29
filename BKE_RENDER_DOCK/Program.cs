@@ -1,4 +1,6 @@
+using BKE.Desktop.Licensing;
 using BKE_MediaTools.Licensing;
+using BKE_MediaTools.Updates;
 using static BKE_MediaTools.BKE_RenderDock;
 
 namespace BKE_MediaTools
@@ -45,21 +47,21 @@ namespace BKE_MediaTools
                         authorization = agentClient.EnsureAuthorizedAsync().GetAwaiter().GetResult();
                     }
 
-                    if (authorization.Status == AuthorizationStatus.Cancelled)
+                    if (authorization.Status == AuthorizationStatus.ActivationCancelled)
                     {
                         return;
                     }
 
-                    if (authorization.Status == AuthorizationStatus.AgentUnavailable)
+                    if (authorization.Status is AuthorizationStatus.AgentUnavailable or AuthorizationStatus.Timeout)
                     {
                         AgentRecoveryDialog.ShowRecovery();
                         return;
                     }
 
-                    if (authorization.Status != AuthorizationStatus.Allowed)
+                    if (authorization.Status != AuthorizationStatus.Authorized)
                     {
                         MessageBox.Show(
-                            authorization.Message,
+                            authorization.Reason,
                             "Render Dock Licensing",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning);
@@ -70,7 +72,7 @@ namespace BKE_MediaTools
 
             FfmpegBootstrap.EnsurePresentOrOffer();
             var mainForm = new BKE_RenderDock();
-            AgentUpdateCoordinator.Attach(mainForm, enterpriseSession);
+            UpdateCoordinator.Attach(mainForm, enterpriseSession);
             Application.Run(mainForm);
         }
     }

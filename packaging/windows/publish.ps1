@@ -14,7 +14,7 @@ dotnet publish $project `
     --runtime win-x64 `
     --self-contained true `
     --output $publishDirectory `
-    /p:Version=1.0.1
+    /p:Version=1.0.2
 
 Copy-Item $manifestSource (Join-Path $publishDirectory 'bke.manifest.json') -Force
 
@@ -30,7 +30,7 @@ if (-not (Test-Path $publishedManifest)) {
 $manifest = Get-Content $publishedManifest -Raw | ConvertFrom-Json
 if ($manifest.productId -ne 'bke-render-dock' -or
     $manifest.displayName -ne 'Render Dock' -or
-    $manifest.version -ne '1.0.1' -or
+    $manifest.version -ne '1.0.2' -or
     $manifest.entryPoint -ne 'RENDER DOCK.exe' -or
     $manifest.platform -ne 'windows' -or
     $manifest.architecture -ne 'x64') {
