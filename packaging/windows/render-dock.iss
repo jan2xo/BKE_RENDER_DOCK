@@ -1,5 +1,5 @@
 #define ProductName "Render Dock"
-#define ProductVersion "1.0.1"
+#define ProductVersion "1.0.2"
 #define Publisher "BKE Digital Solutions"
 #define PublishDir "..\..\artifacts\publish\win-x64"
 
@@ -16,7 +16,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2/max
 SolidCompression=yes
 OutputDir=..\..\artifacts\installer
-OutputBaseFilename=Render-Dock-1.0.1-Windows-x64
+OutputBaseFilename=Render-Dock-1.0.2-Windows-x64
 SetupIconFile=..\..\BKE_RENDER_DOCK\Assets\Render Dock.ico
 UninstallDisplayIcon={app}\RENDER DOCK.exe
 PrivilegesRequired=admin
