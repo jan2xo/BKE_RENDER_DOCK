@@ -3,7 +3,7 @@ param(
     [string]$PublishDirectory,
     [string]$OutputDirectory,
     [string]$ProductId = 'bke-render-dock',
-    [string]$Version = '1.0.1',
+    [string]$Version = '1.0.2',
     [string]$EntryPoint = 'RENDER DOCK.exe'
 )
 
