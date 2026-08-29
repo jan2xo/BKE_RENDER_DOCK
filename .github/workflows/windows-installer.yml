@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   windows-installer:
-    if: github.event_name != 'push' || startsWith(github.event.head_commit.message, 'Release Render Dock 1.0.2')
     runs-on: windows-latest
     steps:
       - name: Check out exact source
@@ -137,7 +136,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release 1.0.2
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release Render Dock 1.0.2')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
