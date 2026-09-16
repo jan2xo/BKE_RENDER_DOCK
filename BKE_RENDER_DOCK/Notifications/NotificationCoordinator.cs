@@ -9,14 +9,19 @@ namespace BKE_MediaTools.Notifications
     {
         private const string ProductId = "bke-render-dock";
 
+        internal static void ShowBeforeLicensing(bool enterpriseSession)
+        {
+            ShowUnreadAsync(owner: null, enterpriseSession).GetAwaiter().GetResult();
+        }
+
         internal static void Attach(Form form, bool enterpriseSession)
         {
             ArgumentNullException.ThrowIfNull(form);
             form.Shown += async (_, __) =>
-                await ShowUnreadAfterStartupAsync(form, enterpriseSession).ConfigureAwait(true);
+                await ShowUnreadAsync(form, enterpriseSession).ConfigureAwait(true);
         }
 
-        private static async Task ShowUnreadAfterStartupAsync(Form form, bool enterpriseSession)
+        private static async Task ShowUnreadAsync(IWin32Window? owner, bool enterpriseSession)
         {
             try
             {
@@ -47,17 +52,28 @@ namespace BKE_MediaTools.Notifications
                         continue;
                     }
 
-                    if (form.IsDisposed)
+                    if (owner is Form form && form.IsDisposed)
                     {
                         return;
                     }
 
-                    MessageBox.Show(
-                        form,
-                        item.Body,
-                        item.Title,
-                        MessageBoxButtons.OK,
-                        IconFor(item.Severity));
+                    if (owner is null)
+                    {
+                        MessageBox.Show(
+                            item.Body,
+                            item.Title,
+                            MessageBoxButtons.OK,
+                            IconFor(item.Severity));
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            owner,
+                            item.Body,
+                            item.Title,
+                            MessageBoxButtons.OK,
+                            IconFor(item.Severity));
+                    }
 
                     var markRead = await client.MarkReadAsync(item.Id).ConfigureAwait(true);
                     if (markRead.Status != NotificationOperationStatus.Succeeded)

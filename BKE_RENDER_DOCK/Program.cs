@@ -32,6 +32,11 @@ namespace BKE_MediaTools
                     .GetResult();
             }
 
+            // Product broadcasts are informational and intentionally run before the
+            // licensing gate so beta/trial/support-end notices remain visible even
+            // when licensing subsequently denies application startup.
+            NotificationCoordinator.ShowBeforeLicensing(enterpriseSession);
+
             if (!enterpriseSession)
             {
                 bool graceActive;
