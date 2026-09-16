@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="BKE.Desktop.Licensing" Version="2.0.0" />
+    <PackageReference Include="BKE.Notifications" Version="0.5.0" />
     <PackageReference Include="BKE.Updater" Version="0.4.0" />
   </ItemGroup>
 
