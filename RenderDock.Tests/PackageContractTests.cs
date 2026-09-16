@@ -69,6 +69,7 @@ public sealed class PackageContractTests
         Assert.Equal("net10.0-windows", project.Descendants("TargetFramework").Single().Value);
         Assert.Equal("net10.0", testProject.Descendants("TargetFramework").Single().Value);
         AssertPackage(project, "BKE.Desktop.Licensing", "2.0.0");
+        AssertPackage(project, "BKE.Notifications", "0.5.0");
         AssertPackage(project, "BKE.Updater", "0.4.0");
         Assert.DoesNotContain(
             project.Descendants("PackageReference"),
@@ -131,13 +132,35 @@ public sealed class PackageContractTests
     }
 
     [Fact]
-    public void SdkBootstrapIsPinnedToCanonicalSdkMerge()
+    public void NotificationInboxUsesCanonicalSdkAndContainsNoProviderProtocol()
+    {
+        var coordinator = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Notifications", "NotificationCoordinator.cs"));
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+
+        Assert.Contains("BkeNotificationInboxClient.Create", coordinator);
+        Assert.Contains("InstallationIdentity.GetOrCreate()", coordinator);
+        Assert.Contains("NotificationFeedQuery", coordinator);
+        Assert.Contains("NotificationState.Unread", coordinator);
+        Assert.Contains("MarkReadAsync", coordinator);
+        Assert.Contains("enterpriseSession && item.Category == NotificationCategory.Licensing", coordinator);
+        Assert.Contains("NotificationCoordinator.Attach(mainForm, enterpriseSession)", program);
+        Assert.DoesNotContain("HttpClient", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("127.0.0.1:43873", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("/v1/notifications/", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("INotificationPublisher", coordinator, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SdkBootstrapIsPinnedToNotificationInboxFeature()
     {
         var bootstrap = File.ReadAllText(Path.Combine(
             RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
 
-        Assert.Contains("be79a1d3e055353183622ed6676498e685475495", bootstrap);
+        Assert.Contains("08a81c8e2a0f65cf253fbc03b91a371f905bc8dd", bootstrap);
         Assert.Contains("BKE.Desktop.Licensing.2.0.0.nupkg", bootstrap);
+        Assert.Contains("BKE.Notifications.0.5.0.nupkg", bootstrap);
         Assert.Contains("BKE.Updater.0.4.0.nupkg", bootstrap);
         Assert.DoesNotContain("packages/BKE.Desktop.Client.1.0.0", bootstrap, StringComparison.OrdinalIgnoreCase);
     }
