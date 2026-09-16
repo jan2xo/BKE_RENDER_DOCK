@@ -8,6 +8,8 @@ namespace BKE_MediaTools.Notifications
     internal static class NotificationCoordinator
     {
         private const string ProductId = "bke-render-dock";
+        private static readonly object ShownGate = new();
+        private static readonly HashSet<string> ShownThisProcess = new(StringComparer.Ordinal);
 
         internal static void ShowBeforeLicensing(bool enterpriseSession)
         {
@@ -55,6 +57,14 @@ namespace BKE_MediaTools.Notifications
                     if (owner is Form form && form.IsDisposed)
                     {
                         return;
+                    }
+
+                    lock (ShownGate)
+                    {
+                        if (!ShownThisProcess.Add(item.Id))
+                        {
+                            continue;
+                        }
                     }
 
                     if (owner is null)
