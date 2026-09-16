@@ -67,7 +67,8 @@ namespace BKE_MediaTools
                     if (authorization.Status != AuthorizationStatus.Authorized)
                     {
                         MessageBox.Show(
-                            authorization.Reason,
+                            "Render Dock could not establish a valid license for this installation. " +
+                            "Use BKE License Center to activate or repair licensing.",
                             "Render Dock Licensing",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning);
