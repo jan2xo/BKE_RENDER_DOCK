@@ -1,5 +1,6 @@
 using BKE.Desktop.Licensing;
 using BKE_MediaTools.Licensing;
+using BKE_MediaTools.Notifications;
 using BKE_MediaTools.Updates;
 using static BKE_MediaTools.BKE_RenderDock;
 
@@ -73,6 +74,7 @@ namespace BKE_MediaTools
             FfmpegBootstrap.EnsurePresentOrOffer();
             var mainForm = new BKE_RenderDock();
             UpdateCoordinator.Attach(mainForm, enterpriseSession);
+            NotificationCoordinator.Attach(mainForm, enterpriseSession);
             Application.Run(mainForm);
         }
     }
