@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$SdkCommit = 'be79a1d3e055353183622ed6676498e685475495'
+    [string]$SdkCommit = '08a81c8e2a0f65cf253fbc03b91a371f905bc8dd'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +36,7 @@ try {
     }
 
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.0.nupkg') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Notifications.0.5.0.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg') -Force -ErrorAction SilentlyContinue
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Desktop.Licensing/BKE.Desktop.Licensing.csproj') `
@@ -43,15 +44,24 @@ try {
         --output $packageDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.0 from canonical SDK source.' }
 
+    dotnet pack (Join-Path $workDirectory 'src/BKE.Notifications/BKE.Notifications.csproj') `
+        --configuration Release `
+        --output $packageDirectory
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Notifications 0.5.0 from canonical SDK source.' }
+
     dotnet pack (Join-Path $workDirectory 'src/BKE.Updater/BKE.Updater.csproj') `
         --configuration Release `
         --output $packageDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Updater 0.4.0 from canonical SDK source.' }
 
     $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.0.nupkg'
+    $notifications = Join-Path $packageDirectory 'BKE.Notifications.0.5.0.nupkg'
     $updater = Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg'
     if (-not (Test-Path -LiteralPath $licensing -PathType Leaf)) {
         throw 'BKE.Desktop.Licensing 2.0.0 package was not produced.'
+    }
+    if (-not (Test-Path -LiteralPath $notifications -PathType Leaf)) {
+        throw 'BKE.Notifications 0.5.0 package was not produced.'
     }
     if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
         throw 'BKE.Updater 0.4.0 package was not produced.'
@@ -59,6 +69,7 @@ try {
 
     Write-Host "Prepared canonical BKE SDK packages from $SdkCommit"
     Write-Host " - $licensing"
+    Write-Host " - $notifications"
     Write-Host " - $updater"
 }
 finally {
