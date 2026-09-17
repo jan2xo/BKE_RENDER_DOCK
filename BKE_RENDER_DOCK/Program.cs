@@ -81,6 +81,7 @@ namespace BKE_MediaTools
             var mainForm = new BKE_RenderDock();
             UpdateCoordinator.Attach(mainForm, enterpriseSession);
             NotificationCoordinator.Attach(mainForm, enterpriseSession);
+            NotificationTrayController.Attach(mainForm, enterpriseSession);
             Application.Run(mainForm);
         }
     }
