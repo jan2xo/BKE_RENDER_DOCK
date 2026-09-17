@@ -158,7 +158,7 @@ public sealed class PackageContractTests
         var bootstrap = File.ReadAllText(Path.Combine(
             RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
 
-        Assert.Contains("250234af6e98ac37db0dad2330f05c4a2510e501", bootstrap);
+        Assert.Contains("82a0dc7540b1b599c027995efe79f05aa5e7c010", bootstrap);
         Assert.Contains("BKE.Desktop.Licensing.2.0.0.nupkg", bootstrap);
         Assert.Contains("BKE.Notifications.0.5.0.nupkg", bootstrap);
         Assert.Contains("BKE.Updater.0.4.0.nupkg", bootstrap);
