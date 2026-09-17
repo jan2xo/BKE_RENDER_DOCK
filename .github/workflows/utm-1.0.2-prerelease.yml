@@ -33,15 +33,19 @@ jobs:
           $project = Get-Content 'BKE_RENDER_DOCK/RENDER DOCK.csproj' -Raw
           $program = Get-Content 'BKE_RENDER_DOCK/Program.cs' -Raw
           $notifications = Get-Content 'BKE_RENDER_DOCK/Notifications/NotificationCoordinator.cs' -Raw
+          $tray = Get-Content 'BKE_RENDER_DOCK/Notifications/NotificationTrayController.cs' -Raw
           $bootstrap = Get-Content 'scripts/bootstrap-bke-sdk.ps1' -Raw
           $payload = Get-Content 'packaging/windows/build-updater-payload.ps1' -Raw
           if ($project -notmatch '<Version>1\.0\.2</Version>') { throw 'Render Dock version is not 1.0.2.' }
           if ($project -notmatch 'PackageReference Include="BKE\.Notifications" Version="0\.5\.0"') { throw 'BKE.Notifications 0.5.0 reference missing.' }
-          if (-not $bootstrap.Contains('250234af6e98ac37db0dad2330f05c4a2510e501')) { throw 'Notification SDK pin is not exact.' }
+          if (-not $bootstrap.Contains('82a0dc7540b1b599c027995efe79f05aa5e7c010')) { throw 'Notification SDK pin is not the provider-owned cadence head.' }
           if ($notifications -notmatch 'BkeNotificationInboxClient\.Create') { throw 'Notification inbox client missing.' }
           if ($notifications -notmatch 'InstallationIdentity\.GetOrCreate') { throw 'Notification inbox is not installation-bound.' }
           if ($notifications -match 'HttpClient|127\.0\.0\.1:43873|/v1/notifications/') { throw 'Raw notification provider protocol leaked into Render Dock.' }
+          if ($tray -notmatch 'BkeNotificationInboxClient\.Create' -or $tray -notmatch 'GetUnreadCountAsync' -or $tray -notmatch 'MarkReadAsync' -or $tray -notmatch 'DismissAsync') { throw 'Notification tray lifecycle contract is incomplete.' }
+          if ($tray -match 'HttpClient|127\.0\.0\.1:43873|/v1/notifications/') { throw 'Raw notification provider protocol leaked into Render Dock tray.' }
           if ($program -notmatch 'NotificationCoordinator\.Attach\(mainForm, enterpriseSession\)') { throw 'Notification coordinator is not composed.' }
+          if ($program -notmatch 'NotificationTrayController\.Attach\(mainForm, enterpriseSession\)') { throw 'Notification tray is not composed.' }
           if ($payload -notmatch 'Resolve-Path -LiteralPath \$PublishDirectory') { throw 'Updater payload root normalization fix missing.' }
           if ($payload -notmatch 'Updater payload is missing exact root entry point') { throw 'Updater root-entry verification fix missing.' }
 
@@ -132,7 +136,7 @@ jobs:
 
           Disposable prerelease for UTM validation of the notification-capable Render Dock 1.0.2 candidate.
 
-          Includes BKE.Notifications 0.5.0 Agent inbox consumption and the updater ZIP-root normalization/verification fix from the still-unmerged updater payload work.
+          Includes the Agent-backed startup notification flow and in-application notification tray through BKE.Notifications 0.5.0, plus the updater ZIP-root normalization/verification fix from the still-unmerged updater payload work.
 
           This is not the final stable v1.0.2 release.
           '@ | Set-Content $notes

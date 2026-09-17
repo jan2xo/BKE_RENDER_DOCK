@@ -47,22 +47,32 @@ jobs:
           $program = Get-Content "BKE_RENDER_DOCK/Program.cs" -Raw
           $licensing = Get-Content "BKE_RENDER_DOCK/Licensing/AgentClient.cs" -Raw
           $updates = Get-Content "BKE_RENDER_DOCK/Updates/UpdateCoordinator.cs" -Raw
+          $notifications = Get-Content "BKE_RENDER_DOCK/Notifications/NotificationCoordinator.cs" -Raw
+          $tray = Get-Content "BKE_RENDER_DOCK/Notifications/NotificationTrayController.cs" -Raw
           $bootstrap = Get-Content "scripts/bootstrap-bke-sdk.ps1" -Raw
           if ($project -notmatch '<TargetFramework>net10\.0-windows</TargetFramework>') { throw '.NET 10 Windows target missing' }
           if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.0"') { throw 'BKE Desktop Licensing 2.0.0 reference missing' }
+          if ($project -notmatch 'PackageReference Include="BKE\.Notifications" Version="0\.5\.0"') { throw 'BKE Notifications 0.5.0 reference missing' }
           if ($project -notmatch 'PackageReference Include="BKE\.Updater" Version="0\.4\.0"') { throw 'BKE Updater 0.4.0 reference missing' }
           if ($project -match 'PackageReference Include="BKE\.Desktop\.Client"') { throw 'Legacy BKE Desktop Client reference must remain removed' }
-          if (-not $bootstrap.Contains('be79a1d3e055353183622ed6676498e685475495')) { throw 'BKE SDK bootstrap is not pinned to the canonical 0.4.0 merge.' }
+          if (-not $bootstrap.Contains('82a0dc7540b1b599c027995efe79f05aa5e7c010')) { throw 'BKE SDK bootstrap is not pinned to the provider-owned notification cadence head.' }
           if ($licensing -notmatch 'BkeLicensingClient\.Create') { throw 'Desktop Licensing client missing' }
           if ($licensing -notmatch 'EnsureAuthorizedAsync') { throw 'Canonical licensing flow missing' }
           if ($licensing -match 'HttpClient|127\.0\.0\.1:43873|/v1/authorize|/v1/license-center/open') { throw 'Direct licensing transport must not return to Render Dock' }
           if ($updates -notmatch 'BkeUpdaterClient\.Create') { throw 'BKE Updater client missing' }
           if ($updates -notmatch 'UpdateCheckStatus\.UpdateAvailable') { throw 'Typed update result handling missing' }
           if ($updates -match 'HttpClient|127\.0\.0\.1:43873|/v1/updates|/v1/update-center/open') { throw 'Direct updater provider protocol must not return to Render Dock' }
+          if ($notifications -notmatch 'BkeNotificationInboxClient\.Create') { throw 'Notification inbox client missing' }
+          if ($notifications -match 'HttpClient|127\.0\.0\.1:43873|/v1/notifications/') { throw 'Direct notification provider protocol must not return to Render Dock' }
+          if ($tray -notmatch 'BkeNotificationInboxClient\.Create') { throw 'Notification tray is not Agent-backed through BKE.Notifications' }
+          if ($tray -notmatch 'GetUnreadCountAsync' -or $tray -notmatch 'MarkReadAsync' -or $tray -notmatch 'DismissAsync') { throw 'Notification tray lifecycle contract is incomplete' }
+          if ($tray -match 'HttpClient|127\.0\.0\.1:43873|/v1/notifications/') { throw 'Raw notification transport leaked into the notification tray' }
           if (Test-Path 'BKE_RENDER_DOCK/Licensing/AgentUpdateClient.cs') { throw 'Legacy AgentUpdateClient must be removed.' }
           if (Test-Path 'BKE_RENDER_DOCK/Licensing/AgentUpdateCoordinator.cs') { throw 'Legacy AgentUpdateCoordinator must be removed.' }
           if (Test-Path 'BKE_RENDER_DOCK/Licensing/AuthorizationResult.cs') { throw 'Duplicate licensing result contract must be removed.' }
           if ($program -notmatch 'UpdateCoordinator\.Attach\(mainForm, enterpriseSession\)') { throw 'SDK update capability is not composed into Render Dock.' }
+          if ($program -notmatch 'NotificationCoordinator\.Attach\(mainForm, enterpriseSession\)') { throw 'Startup notification coordinator is not composed into Render Dock.' }
+          if ($program -notmatch 'NotificationTrayController\.Attach\(mainForm, enterpriseSession\)') { throw 'Notification tray is not composed into Render Dock.' }
 
       - name: Test package contracts
         run: dotnet test "RenderDock.Tests/RenderDock.Tests.csproj" --configuration Release
@@ -76,6 +86,7 @@ jobs:
         run: |
           $assets = Get-Content "BKE_RENDER_DOCK/obj/project.assets.json" -Raw
           if ($assets -notmatch 'BKE\.Desktop\.Licensing/2\.0\.0') { throw 'BKE Desktop Licensing 2.0.0 was not restored into Render Dock.' }
+          if ($assets -notmatch 'BKE\.Notifications/0\.5\.0') { throw 'BKE Notifications 0.5.0 was not restored into Render Dock.' }
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored into Render Dock.' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must not remain in Render Dock restore graph.' }
 
@@ -152,7 +163,7 @@ jobs:
           @'
           Render Dock 1.0.2
 
-          Render Dock .NET 10 SDK-capability release. Licensing uses BKE.Desktop.Licensing 2.0.0 and update discovery uses BKE.Updater 0.4.0 through the trusted Licensing Agent provider boundary.
+          Render Dock .NET 10 SDK-capability release. Licensing uses BKE.Desktop.Licensing 2.0.0, update discovery uses BKE.Updater 0.4.0, and notifications use BKE.Notifications 0.5.0 through the trusted Licensing Agent provider boundary.
 
           Assets include the Windows installer, deterministic updater payload ZIP, updater metadata, and SHA-256 evidence.
           '@ | Set-Content -LiteralPath $notesPath
