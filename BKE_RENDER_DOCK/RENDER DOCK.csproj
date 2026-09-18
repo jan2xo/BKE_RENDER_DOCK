@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BKE.Desktop.Licensing" Version="2.0.0" />
+    <PackageReference Include="BKE.Desktop.Licensing" Version="2.0.1" />
     <PackageReference Include="BKE.Updater" Version="0.4.0" />
   </ItemGroup>
 
