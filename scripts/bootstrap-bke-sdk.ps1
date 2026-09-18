@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$SdkCommit = 'be79a1d3e055353183622ed6676498e685475495'
+    [string]$SdkCommit = 'a04b197ce2e9a5005922d7986989c45975a57b8c'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,13 +35,13 @@ try {
         throw "BKE SDK checkout mismatch. Expected $SdkCommit but resolved $resolved."
     }
 
-    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.0.nupkg') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg') -Force -ErrorAction SilentlyContinue
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Desktop.Licensing/BKE.Desktop.Licensing.csproj') `
         --configuration Release `
         --output $packageDirectory
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.0 from canonical SDK source.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.1 from canonical SDK source.' }
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Updater/BKE.Updater.csproj') `
         --configuration Release `
