@@ -49,10 +49,10 @@ jobs:
           $updates = Get-Content "BKE_RENDER_DOCK/Updates/UpdateCoordinator.cs" -Raw
           $bootstrap = Get-Content "scripts/bootstrap-bke-sdk.ps1" -Raw
           if ($project -notmatch '<TargetFramework>net10\.0-windows</TargetFramework>') { throw '.NET 10 Windows target missing' }
-          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.0"') { throw 'BKE Desktop Licensing 2.0.0 reference missing' }
+          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.1"') { throw 'BKE Desktop Licensing 2.0.1 reference missing' }
           if ($project -notmatch 'PackageReference Include="BKE\.Updater" Version="0\.4\.0"') { throw 'BKE Updater 0.4.0 reference missing' }
           if ($project -match 'PackageReference Include="BKE\.Desktop\.Client"') { throw 'Legacy BKE Desktop Client reference must remain removed' }
-          if (-not $bootstrap.Contains('be79a1d3e055353183622ed6676498e685475495')) { throw 'BKE SDK bootstrap is not pinned to the canonical 0.4.0 merge.' }
+          if (-not $bootstrap.Contains('eb194d71f33e881fa34d50b3ba20743d51ad1b73')) { throw 'BKE SDK bootstrap is not pinned to the canonical recovery SDK commit.' }
           if ($licensing -notmatch 'BkeLicensingClient\.Create') { throw 'Desktop Licensing client missing' }
           if ($licensing -notmatch 'EnsureAuthorizedAsync') { throw 'Canonical licensing flow missing' }
           if ($licensing -match 'HttpClient|127\.0\.0\.1:43873|/v1/authorize|/v1/license-center/open') { throw 'Direct licensing transport must not return to Render Dock' }
@@ -75,9 +75,45 @@ jobs:
         shell: pwsh
         run: |
           $assets = Get-Content "BKE_RENDER_DOCK/obj/project.assets.json" -Raw
-          if ($assets -notmatch 'BKE\.Desktop\.Licensing/2\.0\.0') { throw 'BKE Desktop Licensing 2.0.0 was not restored into Render Dock.' }
+          if ($assets -notmatch 'BKE\.Desktop\.Licensing/2\.0\.1') { throw 'BKE Desktop Licensing 2.0.1 was not restored into Render Dock.' }
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored into Render Dock.' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must not remain in Render Dock restore graph.' }
+
+      - name: Validate preserved-authority recovery certification
+        shell: pwsh
+        run: |
+          $path = (Resolve-Path 'certification/windows_preserved_authority_recovery.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'Preserved-authority recovery certification script has PowerShell parse errors.'
+          }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @('InstallAndPrepare','Prepare','Exercise','Collect','unverifiable_signed_lease','lease_version_rejected')) {
+            if (-not $source.Contains($required)) { throw "Recovery certification contract missing: $required" }
+          }
+
+          # Regression proof: invoke the script without -KitRoot. The probe must
+          # reach Collect-mode evidence lookup instead of failing during Join-Path
+          # because an automatic script-root variable resolved empty at parameter binding.
+          $probeRoot = Join-Path $env:RUNNER_TEMP 'render-dock-recovery-kitroot-probe'
+          Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction SilentlyContinue
+          $probeOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $path -Mode Collect -EvidenceRoot $probeRoot 2>&1
+          $probeExit = $LASTEXITCODE
+          # The child is expected to exit non-zero because no result.json exists.
+          # Capture that result, then clear LASTEXITCODE so the GitHub pwsh wrapper
+          # does not report the successful regression assertion itself as failure.
+          $global:LASTEXITCODE = 0
+          $probeText = ($probeOutput | Out-String)
+          if ($probeExit -eq 0) { throw 'Recovery KitRoot probe unexpectedly succeeded without result evidence.' }
+          if ($probeText -match 'Cannot bind argument to parameter .Path. because it is an empty string') {
+            throw 'Recovery KitRoot default still resolves to an empty path.'
+          }
+          if ($probeText -notmatch 'No result found') {
+            throw "Recovery KitRoot probe failed before expected Collect boundary: $probeText"
+          }
 
       - name: Build verified updater payload candidate
         shell: pwsh
@@ -94,10 +130,12 @@ jobs:
       - name: Hash release artifacts
         shell: pwsh
         run: |
+          Copy-Item -LiteralPath "certification/windows_preserved_authority_recovery.ps1" -Destination "artifacts/installer/windows_preserved_authority_recovery.ps1" -Force
           $files = @(
             "artifacts/installer/Render-Dock-1.0.2-Windows-x64.exe",
             "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip",
-            "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json"
+            "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json",
+            "artifacts/installer/windows_preserved_authority_recovery.ps1"
           )
           foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file)) { throw "Release artifact was not produced: $file" }
@@ -133,6 +171,7 @@ jobs:
             artifacts/installer/SHA256SUMS
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json
+            artifacts/installer/windows_preserved_authority_recovery.ps1
           if-no-files-found: error
 
       - name: Publish GitHub release 1.0.2
@@ -152,7 +191,7 @@ jobs:
           @'
           Render Dock 1.0.2
 
-          Render Dock .NET 10 SDK-capability release. Licensing uses BKE.Desktop.Licensing 2.0.0 and update discovery uses BKE.Updater 0.4.0 through the trusted Licensing Agent provider boundary.
+          Render Dock .NET 10 SDK-capability release. Licensing uses BKE.Desktop.Licensing 2.0.1 and update discovery uses BKE.Updater 0.4.0 through the trusted Licensing Agent provider boundary.
 
           Assets include the Windows installer, deterministic updater payload ZIP, updater metadata, and SHA-256 evidence.
           '@ | Set-Content -LiteralPath $notesPath

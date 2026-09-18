@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$SdkCommit = 'be79a1d3e055353183622ed6676498e685475495'
+    [string]$SdkCommit = 'eb194d71f33e881fa34d50b3ba20743d51ad1b73'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,23 +35,23 @@ try {
         throw "BKE SDK checkout mismatch. Expected $SdkCommit but resolved $resolved."
     }
 
-    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.0.nupkg') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg') -Force -ErrorAction SilentlyContinue
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Desktop.Licensing/BKE.Desktop.Licensing.csproj') `
         --configuration Release `
         --output $packageDirectory
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.0 from canonical SDK source.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.1 from canonical SDK source.' }
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Updater/BKE.Updater.csproj') `
         --configuration Release `
         --output $packageDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Updater 0.4.0 from canonical SDK source.' }
 
-    $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.0.nupkg'
+    $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg'
     $updater = Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg'
     if (-not (Test-Path -LiteralPath $licensing -PathType Leaf)) {
-        throw 'BKE.Desktop.Licensing 2.0.0 package was not produced.'
+        throw 'BKE.Desktop.Licensing 2.0.1 package was not produced.'
     }
     if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
         throw 'BKE.Updater 0.4.0 package was not produced.'
