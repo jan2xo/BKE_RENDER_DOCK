@@ -79,6 +79,22 @@ jobs:
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored into Render Dock.' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must not remain in Render Dock restore graph.' }
 
+      - name: Validate preserved-authority recovery certification
+        shell: pwsh
+        run: |
+          $path = (Resolve-Path 'certification/windows_preserved_authority_recovery.ps1').Path
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'Preserved-authority recovery certification script has PowerShell parse errors.'
+          }
+          $source = Get-Content -LiteralPath $path -Raw
+          foreach ($required in @('InstallAndPrepare','Prepare','Exercise','Collect','unverifiable_signed_lease','lease_version_rejected')) {
+            if (-not $source.Contains($required)) { throw "Recovery certification contract missing: $required" }
+          }
+
       - name: Build verified updater payload candidate
         shell: pwsh
         run: .\packaging\windows\build-updater-payload.ps1 -PublishDirectory '.\artifacts\publish\win-x64' -OutputDirectory '.\artifacts\installer'
@@ -94,10 +110,12 @@ jobs:
       - name: Hash release artifacts
         shell: pwsh
         run: |
+          Copy-Item -LiteralPath "certification/windows_preserved_authority_recovery.ps1" -Destination "artifacts/installer/windows_preserved_authority_recovery.ps1" -Force
           $files = @(
             "artifacts/installer/Render-Dock-1.0.2-Windows-x64.exe",
             "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip",
-            "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json"
+            "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json",
+            "artifacts/installer/windows_preserved_authority_recovery.ps1"
           )
           foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file)) { throw "Release artifact was not produced: $file" }
@@ -133,6 +151,7 @@ jobs:
             artifacts/installer/SHA256SUMS
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json
+            artifacts/installer/windows_preserved_authority_recovery.ps1
           if-no-files-found: error
 
       - name: Publish GitHub release 1.0.2
