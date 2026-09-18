@@ -6,7 +6,7 @@ Render Dock is a Windows media-output product built on reusable BKE capabilities
 
 ```text
 Render Dock
-├── BKE.Desktop.Licensing 2.0.0
+├── BKE.Desktop.Licensing 2.0.1
 │     ↓
 │   BKE Licensing Agent
 │
@@ -36,7 +36,7 @@ WHAT I GET
 - typed authorization result
 ```
 
-The SDK owns the standard authorization / Agent-owned activation choreography. Render Dock fails closed when authorization is not granted.
+The SDK owns the standard authorization / Agent-owned activation choreography. Signed authority that is expired, version-stale, revoked, superseded, or otherwise recoverable is routed back through the Agent-owned License Center. Render Dock remains fail closed and launches only after the Agent explicitly grants authorization.
 
 The existing operational grace check remains a separate legacy product integration in this release and is intentionally not redesigned during the updater/.NET 10 migration.
 
@@ -95,7 +95,7 @@ BKE packages are prepared from the exact canonical `bke-sdk` merge pinned by:
 The script checks out the exact SDK commit, verifies the resolved SHA, and packs only the capabilities Render Dock consumes:
 
 ```text
-BKE.Desktop.Licensing 2.0.0
+BKE.Desktop.Licensing 2.0.1
 BKE.Updater            0.4.0
 ```
 
