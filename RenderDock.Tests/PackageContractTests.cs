@@ -68,7 +68,7 @@ public sealed class PackageContractTests
 
         Assert.Equal("net10.0-windows", project.Descendants("TargetFramework").Single().Value);
         Assert.Equal("net10.0", testProject.Descendants("TargetFramework").Single().Value);
-        AssertPackage(project, "BKE.Desktop.Licensing", "2.0.0");
+        AssertPackage(project, "BKE.Desktop.Licensing", "2.0.1");
         AssertPackage(project, "BKE.Updater", "0.4.0");
         Assert.DoesNotContain(
             project.Descendants("PackageReference"),
@@ -136,8 +136,8 @@ public sealed class PackageContractTests
         var bootstrap = File.ReadAllText(Path.Combine(
             RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
 
-        Assert.Contains("be79a1d3e055353183622ed6676498e685475495", bootstrap);
-        Assert.Contains("BKE.Desktop.Licensing.2.0.0.nupkg", bootstrap);
+        Assert.Contains("eb194d71f33e881fa34d50b3ba20743d51ad1b73", bootstrap);
+        Assert.Contains("BKE.Desktop.Licensing.2.0.1.nupkg", bootstrap);
         Assert.Contains("BKE.Updater.0.4.0.nupkg", bootstrap);
         Assert.DoesNotContain("packages/BKE.Desktop.Client.1.0.0", bootstrap, StringComparison.OrdinalIgnoreCase);
     }
