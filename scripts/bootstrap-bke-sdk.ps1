@@ -48,10 +48,10 @@ try {
         --output $packageDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Updater 0.4.0 from canonical SDK source.' }
 
-    $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.0.nupkg'
+    $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg'
     $updater = Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg'
     if (-not (Test-Path -LiteralPath $licensing -PathType Leaf)) {
-        throw 'BKE.Desktop.Licensing 2.0.0 package was not produced.'
+        throw 'BKE.Desktop.Licensing 2.0.1 package was not produced.'
     }
     if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
         throw 'BKE.Updater 0.4.0 package was not produced.'
