@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$SdkCommit = 'a04b197ce2e9a5005922d7986989c45975a57b8c'
+    [string]$SdkCommit = 'eb194d71f33e881fa34d50b3ba20743d51ad1b73'
 )
 
 $ErrorActionPreference = 'Stop'
