@@ -102,6 +102,10 @@ jobs:
           Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction SilentlyContinue
           $probeOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $path -Mode Collect -EvidenceRoot $probeRoot 2>&1
           $probeExit = $LASTEXITCODE
+          # The child is expected to exit non-zero because no result.json exists.
+          # Capture that result, then clear LASTEXITCODE so the GitHub pwsh wrapper
+          # does not report the successful regression assertion itself as failure.
+          $global:LASTEXITCODE = 0
           $probeText = ($probeOutput | Out-String)
           if ($probeExit -eq 0) { throw 'Recovery KitRoot probe unexpectedly succeeded without result evidence.' }
           if ($probeText -match 'Cannot bind argument to parameter .Path. because it is an empty string') {
