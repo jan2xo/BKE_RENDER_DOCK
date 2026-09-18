@@ -49,10 +49,10 @@ jobs:
           $updates = Get-Content "BKE_RENDER_DOCK/Updates/UpdateCoordinator.cs" -Raw
           $bootstrap = Get-Content "scripts/bootstrap-bke-sdk.ps1" -Raw
           if ($project -notmatch '<TargetFramework>net10\.0-windows</TargetFramework>') { throw '.NET 10 Windows target missing' }
-          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.0"') { throw 'BKE Desktop Licensing 2.0.1 reference missing' }
+          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.1"') { throw 'BKE Desktop Licensing 2.0.1 reference missing' }
           if ($project -notmatch 'PackageReference Include="BKE\.Updater" Version="0\.4\.0"') { throw 'BKE Updater 0.4.0 reference missing' }
           if ($project -match 'PackageReference Include="BKE\.Desktop\.Client"') { throw 'Legacy BKE Desktop Client reference must remain removed' }
-          if (-not $bootstrap.Contains('be79a1d3e055353183622ed6676498e685475495')) { throw 'BKE SDK bootstrap is not pinned to the canonical 0.4.0 merge.' }
+          if (-not $bootstrap.Contains('eb194d71f33e881fa34d50b3ba20743d51ad1b73')) { throw 'BKE SDK bootstrap is not pinned to the canonical recovery SDK commit.' }
           if ($licensing -notmatch 'BkeLicensingClient\.Create') { throw 'Desktop Licensing client missing' }
           if ($licensing -notmatch 'EnsureAuthorizedAsync') { throw 'Canonical licensing flow missing' }
           if ($licensing -match 'HttpClient|127\.0\.0\.1:43873|/v1/authorize|/v1/license-center/open') { throw 'Direct licensing transport must not return to Render Dock' }
@@ -75,7 +75,7 @@ jobs:
         shell: pwsh
         run: |
           $assets = Get-Content "BKE_RENDER_DOCK/obj/project.assets.json" -Raw
-          if ($assets -notmatch 'BKE\.Desktop\.Licensing/2\.0\.0') { throw 'BKE Desktop Licensing 2.0.1 was not restored into Render Dock.' }
+          if ($assets -notmatch 'BKE\.Desktop\.Licensing/2\.0\.1') { throw 'BKE Desktop Licensing 2.0.1 was not restored into Render Dock.' }
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored into Render Dock.' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must not remain in Render Dock restore graph.' }
 
