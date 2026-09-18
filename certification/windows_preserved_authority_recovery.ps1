@@ -2,12 +2,24 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('InstallAndPrepare','Prepare','Exercise','Collect')]
     [string]$Mode,
-    [string]$KitRoot = $PSScriptRoot,
+    [string]$KitRoot = '',
     [string]$EvidenceRoot = "$env:ProgramData\BKE Digital Solutions\Render Dock\preserved-authority-recovery"
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# $PSScriptRoot is not reliable as a parameter-default expression when the script
+# is launched through a nested powershell -File invocation. Resolve the script
+# directory only after parameter binding so KitRoot never becomes an empty path.
+if ([string]::IsNullOrWhiteSpace($KitRoot)) {
+    $scriptPath = [string]$MyInvocation.MyCommand.Path
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        throw 'Unable to resolve recovery kit root from the current script path.'
+    }
+    $KitRoot = Split-Path -Parent $scriptPath
+}
+$KitRoot = [IO.Path]::GetFullPath($KitRoot)
 
 $productId = 'bke-render-dock'
 $productVersion = '1.0.2'
