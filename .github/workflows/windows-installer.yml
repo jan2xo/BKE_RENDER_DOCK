@@ -67,9 +67,11 @@ jobs:
       - name: Test package contracts
         run: dotnet test "RenderDock.Tests/RenderDock.Tests.csproj" --configuration Release
 
-      - name: Publish self-contained Windows x64 application
+      - name: Publish self-contained Windows x64 + ARM64 applications
         shell: pwsh
-        run: .\packaging\windows\publish.ps1
+        run: |
+          .\packaging\windows\publish.ps1 -Architecture x64
+          .\packaging\windows\publish.ps1 -Architecture arm64
 
       - name: Verify SDK restore graph in product
         shell: pwsh
@@ -79,9 +81,17 @@ jobs:
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored into Render Dock.' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must not remain in Render Dock restore graph.' }
 
-      - name: Build verified updater payload candidate
+      - name: Build verified updater payload candidates
         shell: pwsh
-        run: .\packaging\windows\build-updater-payload.ps1 -PublishDirectory '.\artifacts\publish\win-x64' -OutputDirectory '.\artifacts\installer'
+        run: |
+          .\packaging\windows\build-updater-payload.ps1 `
+            -PublishDirectory '.\artifacts\publish\win-x64' `
+            -OutputDirectory '.\artifacts\installer' `
+            -Architecture x64
+          .\packaging\windows\build-updater-payload.ps1 `
+            -PublishDirectory '.\artifacts\publish\win-arm64' `
+            -OutputDirectory '.\artifacts\installer' `
+            -Architecture arm64
 
       - name: Install Inno Setup
         shell: pwsh
@@ -97,7 +107,9 @@ jobs:
           $files = @(
             "artifacts/installer/Render-Dock-1.0.2-Windows-x64.exe",
             "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip",
-            "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json"
+            "artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json",
+            "artifacts/installer/Render-Dock-1.0.2-Windows-arm64.update.zip",
+            "artifacts/installer/Render-Dock-1.0.2-Windows-arm64.update.json"
           )
           foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file)) { throw "Release artifact was not produced: $file" }
@@ -113,26 +125,61 @@ jobs:
       - name: Verify updater payload metadata
         shell: pwsh
         run: |
-          $metadata = Get-Content -LiteralPath 'artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json' -Raw | ConvertFrom-Json
-          if ($metadata.schema -ne 'bke.update-package.v1' -or
-              $metadata.productId -ne 'bke-render-dock' -or
-              $metadata.version -ne '1.0.2' -or
-              $metadata.entryPoint -ne 'RENDER DOCK.exe' -or
-              $metadata.contentType -ne 'application/vnd.bke.update-package+zip') {
-            throw 'Updater payload metadata contract invalid.'
+          function Assert-UpdaterMetadata([string]$Architecture) {
+            $metadataPath = "artifacts/installer/Render-Dock-1.0.2-Windows-$Architecture.update.json"
+            $payloadPath = "artifacts/installer/Render-Dock-1.0.2-Windows-$Architecture.update.zip"
+            $manifestPath = "artifacts/publish/win-$Architecture/bke.manifest.json"
+
+            $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+
+            if ($metadata.schema -ne 'bke.update-package.v1' -or
+                $metadata.productId -ne 'bke-render-dock' -or
+                $metadata.version -ne '1.0.2' -or
+                $metadata.platform -ne 'windows' -or
+                $metadata.architecture -ne $Architecture -or
+                $metadata.entryPoint -ne 'RENDER DOCK.exe' -or
+                $metadata.contentType -ne 'application/vnd.bke.update-package+zip') {
+              throw "Updater payload metadata contract invalid for $Architecture."
+            }
+
+            if ($manifest.productId -ne 'bke-render-dock' -or
+                $manifest.version -ne '1.0.2' -or
+                $manifest.platform -ne 'windows' -or
+                $manifest.architecture -ne $Architecture -or
+                $manifest.entryPoint -ne 'RENDER DOCK.exe') {
+              throw "Published manifest contract invalid for $Architecture."
+            }
+
+            if ($metadata.filename -ne "Render-Dock-1.0.2-Windows-$Architecture.update.zip") {
+              throw "Updater payload filename is not architecture-bound for $Architecture."
+            }
+
+            $payload = Get-Item -LiteralPath $payloadPath
+            $payloadHash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($metadata.sha256 -ne $payloadHash) {
+              throw "Updater payload metadata hash does not match the $Architecture updater ZIP."
+            }
+            if ([int64]$metadata.bytes -ne $payload.Length) {
+              throw "Updater payload metadata size does not match the $Architecture updater ZIP."
+            }
           }
-          $payloadHash = (Get-FileHash -LiteralPath 'artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($metadata.sha256 -ne $payloadHash) { throw 'Updater payload metadata hash does not match the updater ZIP.' }
+
+          Assert-UpdaterMetadata 'x64'
+          Assert-UpdaterMetadata 'arm64'
+          Write-Host 'Render Dock x64 + ARM64 updater payload metadata: PASS'
 
       - name: Upload installer and updater artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Render-Dock-1.0.2-Windows-x64
+          name: Render-Dock-1.0.2-Windows-release-candidates
           path: |
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.exe
             artifacts/installer/SHA256SUMS
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip
             artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json
+            artifacts/installer/Render-Dock-1.0.2-Windows-arm64.update.zip
+            artifacts/installer/Render-Dock-1.0.2-Windows-arm64.update.json
           if-no-files-found: error
 
       - name: Publish GitHub release 1.0.2
@@ -164,5 +211,7 @@ jobs:
             'artifacts/installer/Render-Dock-1.0.2-Windows-x64.exe' `
             'artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.zip' `
             'artifacts/installer/Render-Dock-1.0.2-Windows-x64.update.json' `
+            'artifacts/installer/Render-Dock-1.0.2-Windows-arm64.update.zip' `
+            'artifacts/installer/Render-Dock-1.0.2-Windows-arm64.update.json' `
             'artifacts/installer/SHA256SUMS'
           if ($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed.' }
