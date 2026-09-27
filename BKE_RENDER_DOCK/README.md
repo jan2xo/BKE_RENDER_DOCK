@@ -6,7 +6,11 @@ Render Dock is a Windows media-output product built on reusable BKE capabilities
 
 ```text
 Render Dock
-├── BKE.Desktop.Licensing 2.0.0
+├── BKE.Desktop.Licensing 2.0.1
+│     ↓
+│   BKE Licensing Agent
+│
+├── BKE.Notifications 0.5.0
 │     ↓
 │   BKE Licensing Agent
 │
@@ -19,7 +23,7 @@ Render Dock owns product behavior and UI. It does not define Licensing Agent tra
 
 ## Licensing
 
-Standalone startup uses `BKE.Desktop.Licensing` 2.0.0:
+Standalone startup uses `BKE.Desktop.Licensing` 2.0.1:
 
 ```text
 WHAT I NEED
@@ -71,6 +75,7 @@ For `UpdateAvailable`, Render Dock currently shows informational product UI only
 - **Double-click to open output:** double-click the app window to open the most recent output folder
 - **Authorization:** operational grace first; otherwise the canonical BKE licensing SDK capability
 - **Enterprise launch:** Air Stack child-session redemption remains Agent-authenticated named-pipe IPC
+- **Notifications:** Agent-backed startup inbox + in-product notification tray; product has no publication authority
 - **Update discovery:** canonical BKE updater SDK capability; no product-local updater transport
 - **Fail closed licensing:** protected startup proceeds only after grace, redeemed enterprise session, or explicit Agent authorization
 
@@ -95,7 +100,8 @@ BKE packages are prepared from the exact canonical `bke-sdk` merge pinned by:
 The script checks out the exact SDK commit, verifies the resolved SHA, and packs only the capabilities Render Dock consumes:
 
 ```text
-BKE.Desktop.Licensing 2.0.0
+BKE.Desktop.Licensing 2.0.1
+BKE.Notifications      0.5.0
 BKE.Updater            0.4.0
 ```
 

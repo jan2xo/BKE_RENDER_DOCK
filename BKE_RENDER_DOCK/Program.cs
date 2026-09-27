@@ -1,5 +1,6 @@
 using BKE.Desktop.Licensing;
 using BKE_MediaTools.Licensing;
+using BKE_MediaTools.Notifications;
 using BKE_MediaTools.Updates;
 using static BKE_MediaTools.BKE_RenderDock;
 
@@ -31,6 +32,11 @@ namespace BKE_MediaTools
                     .GetResult();
             }
 
+            // Product broadcasts are informational and intentionally run before the
+            // licensing gate so beta/trial/support-end notices remain visible even
+            // when licensing subsequently denies application startup.
+            NotificationCoordinator.ShowBeforeLicensing(enterpriseSession);
+
             if (!enterpriseSession)
             {
                 bool graceActive;
@@ -61,7 +67,8 @@ namespace BKE_MediaTools
                     if (authorization.Status != AuthorizationStatus.Authorized)
                     {
                         MessageBox.Show(
-                            authorization.Reason,
+                            "Render Dock could not establish a valid license for this installation. " +
+                            "Use BKE License Center to activate or repair licensing.",
                             "Render Dock Licensing",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning);
@@ -73,6 +80,8 @@ namespace BKE_MediaTools
             FfmpegBootstrap.EnsurePresentOrOffer();
             var mainForm = new BKE_RenderDock();
             UpdateCoordinator.Attach(mainForm, enterpriseSession);
+            NotificationCoordinator.Attach(mainForm, enterpriseSession);
+            NotificationTrayController.Attach(mainForm, enterpriseSession);
             Application.Run(mainForm);
         }
     }

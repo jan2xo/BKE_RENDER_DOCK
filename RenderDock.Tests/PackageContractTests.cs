@@ -68,7 +68,8 @@ public sealed class PackageContractTests
 
         Assert.Equal("net10.0-windows", project.Descendants("TargetFramework").Single().Value);
         Assert.Equal("net10.0", testProject.Descendants("TargetFramework").Single().Value);
-        AssertPackage(project, "BKE.Desktop.Licensing", "2.0.0");
+        AssertPackage(project, "BKE.Desktop.Licensing", "2.0.1");
+        AssertPackage(project, "BKE.Notifications", "0.5.0");
         AssertPackage(project, "BKE.Updater", "0.4.0");
         Assert.DoesNotContain(
             project.Descendants("PackageReference"),
@@ -131,15 +132,63 @@ public sealed class PackageContractTests
     }
 
     [Fact]
-    public void SdkBootstrapIsPinnedToCanonicalSdkMerge()
+    public void SdkBootstrapIsPinnedToCurrentMergedCapabilities()
     {
         var bootstrap = File.ReadAllText(Path.Combine(
             RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
 
-        Assert.Contains("be79a1d3e055353183622ed6676498e685475495", bootstrap);
-        Assert.Contains("BKE.Desktop.Licensing.2.0.0.nupkg", bootstrap);
+        Assert.Contains("8563d86976f65cd0cfcdd7e21c6c428c561e5dfe", bootstrap);
+        Assert.Contains("BKE.Desktop.Licensing.2.0.1.nupkg", bootstrap);
+        Assert.Contains("BKE.Notifications.0.5.0.nupkg", bootstrap);
         Assert.Contains("BKE.Updater.0.4.0.nupkg", bootstrap);
         Assert.DoesNotContain("packages/BKE.Desktop.Client.1.0.0", bootstrap, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NotificationInboxUsesCanonicalSdkAndContainsNoProviderProtocol()
+    {
+        var coordinator = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Notifications", "NotificationCoordinator.cs"));
+        var tray = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Notifications", "NotificationTrayController.cs"));
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+
+        Assert.Contains("BkeNotificationInboxClient.Create", coordinator);
+        Assert.Contains("InstallationIdentity.GetOrCreate()", coordinator);
+        Assert.Contains("NotificationFeedQuery", coordinator);
+        Assert.Contains("NotificationState.Unread", coordinator);
+        Assert.Contains("MarkReadAsync", coordinator);
+        Assert.Contains("enterpriseSession && item.Category == NotificationCategory.Licensing", coordinator);
+        Assert.Contains("NotificationCoordinator.Attach(mainForm, enterpriseSession)", program);
+        Assert.Contains("NotificationTrayController.Attach(mainForm, enterpriseSession)", program);
+        Assert.Contains("GetUnreadCountAsync", tray);
+        Assert.Contains("DismissAsync", tray);
+        Assert.DoesNotContain("HttpClient", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpClient", tray, StringComparison.Ordinal);
+        Assert.DoesNotContain("127.0.0.1:43873", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("127.0.0.1:43873", tray, StringComparison.Ordinal);
+        Assert.DoesNotContain("INotificationPublisher", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("INotificationPublisher", tray, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsProductPackagingIsX64Only()
+    {
+        var publish = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "packaging", "windows", "publish.ps1"));
+        var payload = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "packaging", "windows", "build-updater-payload.ps1"));
+        var workflow = File.ReadAllText(Path.Combine(
+            RepositoryRoot, ".github", "workflows", "windows-installer.yml"));
+
+        Assert.Contains("win-x64", publish);
+        Assert.DoesNotContain("win-arm64", publish, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Windows-x64.update.zip", payload);
+        Assert.Contains("architecture = 'x64'", payload);
+        Assert.DoesNotContain("Windows-arm64", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("artifacts\\publish\\win-arm64", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("-Architecture arm64", workflow, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

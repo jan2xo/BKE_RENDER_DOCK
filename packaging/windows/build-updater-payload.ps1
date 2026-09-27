@@ -4,21 +4,20 @@ param(
     [string]$OutputDirectory,
     [string]$ProductId = 'bke-render-dock',
     [string]$Version = '1.0.2',
-    [string]$EntryPoint = 'RENDER DOCK.exe',
-    [ValidateSet('x64','arm64')]
-    [string]$Architecture = 'x64'
+    [string]$EntryPoint = 'RENDER DOCK.exe'
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 if (-not (Test-Path -LiteralPath $PublishDirectory -PathType Container)) { throw 'Publish directory is missing.' }
+$PublishDirectory = (Resolve-Path -LiteralPath $PublishDirectory).Path
 if (-not (Test-Path -LiteralPath (Join-Path $PublishDirectory $EntryPoint) -PathType Leaf)) { throw 'Updater payload entry point is missing.' }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
-$payloadName = "Render-Dock-$Version-Windows-$Architecture.update.zip"
+$payloadName = "Render-Dock-$Version-Windows-x64.update.zip"
 $payloadPath = Join-Path $OutputDirectory $payloadName
-$metadataPath = Join-Path $OutputDirectory "Render-Dock-$Version-Windows-$Architecture.update.json"
+$metadataPath = Join-Path $OutputDirectory "Render-Dock-$Version-Windows-x64.update.json"
 Remove-Item -LiteralPath $payloadPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $metadataPath -Force -ErrorAction SilentlyContinue
 
@@ -40,16 +39,24 @@ try {
             try {
                 $output = $entry.Open()
                 try { $input.CopyTo($output) } finally { $output.Dispose() }
-            } finally {
-                $input.Dispose()
-            }
+            } finally { $input.Dispose() }
         }
-    } finally {
-        $archive.Dispose()
-    }
-} finally {
-    $stream.Dispose()
-}
+    } finally { $archive.Dispose() }
+} finally { $stream.Dispose() }
+
+$verificationStream = [System.IO.File]::OpenRead($payloadPath)
+try {
+    $verificationArchive = [System.IO.Compression.ZipArchive]::new($verificationStream, [System.IO.Compression.ZipArchiveMode]::Read, $false)
+    try {
+        $expectedEntryPoint = $EntryPoint.Replace('\','/')
+        $entryPointMatch = $verificationArchive.Entries |
+            Where-Object { $_.FullName -ceq $expectedEntryPoint } |
+            Select-Object -First 1
+        if ($null -eq $entryPointMatch) {
+            throw "Updater payload is missing exact root entry point: $expectedEntryPoint"
+        }
+    } finally { $verificationArchive.Dispose() }
+} finally { $verificationStream.Dispose() }
 
 $payload = Get-Item -LiteralPath $payloadPath
 $hash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -58,7 +65,7 @@ $metadata = [ordered]@{
     productId = $ProductId
     version = $Version
     platform = 'windows'
-    architecture = $Architecture
+    architecture = 'x64'
     entryPoint = $EntryPoint
     filename = $payload.Name
     contentType = 'application/vnd.bke.update-package+zip'
