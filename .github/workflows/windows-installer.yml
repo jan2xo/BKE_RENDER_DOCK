@@ -42,7 +42,7 @@ jobs:
           $payload = Get-Content "packaging/windows/build-updater-payload.ps1" -Raw
 
           if ($project -notmatch '<TargetFramework>net10\.0-windows</TargetFramework>') { throw '.NET 10 Windows target missing' }
-          if ($project -notmatch '<Version>1\.0\.2</Version>') { throw 'Project version is not 1.0.3' }
+          if ($project -notmatch '<Version>1\.0\.3</Version>') { throw 'Project version is not 1.0.3' }
           if ($manifest.version -ne '1.0.3' -or $manifest.architecture -ne 'x64') { throw 'Canonical manifest must remain Render Dock 1.0.3 x64' }
 
           if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.1"') { throw 'BKE Desktop Licensing 2.0.1 reference missing' }
