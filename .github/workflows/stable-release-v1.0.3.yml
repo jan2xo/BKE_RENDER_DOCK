@@ -1,0 +1,212 @@
+
+name: Render Dock 1.0.3 stable release
+
+on:
+  push:
+    branches:
+      - cert/stable-release-v1.0.3
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-dock-1.0.3-stable-release
+  cancel-in-progress: false
+
+env:
+  PRODUCT_SOURCE_SHA: 7a7c82bf9c7c135b1c744e6ada550cda356e4da4
+  VERSION: "1.0.3"
+  TAG: v1.0.3
+
+jobs:
+  publish-stable-release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out exact certified product source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PRODUCT_SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact source checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:PRODUCT_SOURCE_SHA) {
+            throw "Render Dock source drifted: expected $env:PRODUCT_SOURCE_SHA, got $actual"
+          }
+
+      - name: Refuse overwrite of existing stable release or tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Stable release $env:TAG already exists; refusing overwrite."
+          }
+          $global:LASTEXITCODE = 0
+          git ls-remote --tags origin "refs/tags/$env:TAG" | Out-String | ForEach-Object {
+            if ($_.Trim()) { throw "Stable tag $env:TAG already exists; refusing overwrite." }
+          }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Prepare pinned BKE SDK capabilities
+        shell: pwsh
+        run: .\scripts\bootstrap-bke-sdk.ps1
+
+      - name: Run Render Dock contracts
+        shell: pwsh
+        run: |
+          dotnet test "RenderDock.Tests/RenderDock.Tests.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Render Dock contracts failed." }
+
+      - name: Publish Windows x64 product
+        shell: pwsh
+        run: .\packaging\windows\publish.ps1
+
+      - name: Build and verify corrected updater payload
+        shell: pwsh
+        run: |
+          .\packaging\windows\build-updater-payload.ps1 -PublishDirectory '.\artifacts\publish\win-x64' -OutputDirectory '.\artifacts\installer'
+
+          $metadataPath = "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.json"
+          $payloadPath = "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.zip"
+          $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+          $payload = Get-Item -LiteralPath $payloadPath
+          $payloadHash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          if ($metadata.schema -ne 'bke.update-package.v1' -or
+              $metadata.productId -ne 'bke-render-dock' -or
+              $metadata.version -ne $env:VERSION -or
+              $metadata.platform -ne 'windows' -or
+              $metadata.architecture -ne 'x64' -or
+              $metadata.entryPoint -ne 'RENDER DOCK.exe' -or
+              $metadata.sha256 -ne $payloadHash -or
+              [int64]$metadata.bytes -ne $payload.Length) {
+            throw "Render Dock stable updater metadata contract invalid."
+          }
+
+          Add-Type -AssemblyName System.IO.Compression
+          $stream = [IO.File]::OpenRead((Resolve-Path $payloadPath))
+          try {
+            $archive = [IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Read,$false)
+            try {
+              $rootEntry = $archive.Entries | Where-Object { $_.FullName -ceq 'RENDER DOCK.exe' } | Select-Object -First 1
+              if ($null -eq $rootEntry) {
+                throw "Stable updater ZIP is missing exact root RENDER DOCK.exe."
+              }
+            } finally {
+              $archive.Dispose()
+            }
+          } finally {
+            $stream.Dispose()
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Compile Windows x64 installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging/windows/render-dock.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Render Dock 1.0.3 installer compile failed." }
+
+      - name: Build immutable stable-release evidence
+        shell: pwsh
+        run: |
+          $files = @(
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.exe",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.zip",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.json"
+          )
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Stable release artifact missing: $file"
+            }
+          }
+
+          New-Item -ItemType Directory -Force artifacts/release | Out-Null
+          $hashLines = foreach ($file in $files) {
+            $item = Get-Item -LiteralPath $file
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($item.Name)"
+          }
+          $hashLines | Set-Content artifacts/release/SHA256SUMS -Encoding ascii
+
+          @(
+            "release_scope=stable_github_release_for_final_e2e",
+            "product=Render Dock",
+            "version=$env:VERSION",
+            "product_source_sha=$env:PRODUCT_SOURCE_SHA",
+            "architecture=x64",
+            "production_catalog_published=false",
+            "production_signing_cutover=false"
+          ) | Set-Content artifacts/release/SOURCE.txt -Encoding ascii
+
+          @(
+            "# Render Dock 1.0.3",
+            "",
+            "Stable GitHub release explicitly authorized for final BKE standalone-acquisition E2E.",
+            "",
+            "- Windows x64 only.",
+            "- Built from exact certified source $env:PRODUCT_SOURCE_SHA.",
+            "- Corrected updater ZIP-root packaging.",
+            "- Production catalog publication is not part of this release action.",
+            "- Production signing cutover is not part of this release action."
+          ) | Set-Content artifacts/release/RELEASE-NOTES.md -Encoding utf8
+
+      - name: Publish immutable stable GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseArgs = @(
+            "release","create",$env:TAG,
+            "--repo",$env:GITHUB_REPOSITORY,
+            "--target",$env:PRODUCT_SOURCE_SHA,
+            "--title","Render Dock 1.0.3",
+            "--notes-file","artifacts/release/RELEASE-NOTES.md",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.exe",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.zip",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.json",
+            "artifacts/release/SHA256SUMS",
+            "artifacts/release/SOURCE.txt"
+          )
+          & gh @releaseArgs
+          if ($LASTEXITCODE -ne 0) { throw "Stable Render Dock 1.0.3 release publication failed." }
+
+      - name: Verify published stable release identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:TAG" | ConvertFrom-Json
+          if ($release.prerelease) { throw "Stable release unexpectedly marked prerelease." }
+          if ($release.draft) { throw "Stable release unexpectedly remained draft." }
+          if ([string]$release.target_commitish -ne $env:PRODUCT_SOURCE_SHA) {
+            throw "Stable release target source drifted."
+          }
+
+          $required = @(
+            "Render-Dock-$($env:VERSION)-Windows-x64.exe",
+            "Render-Dock-$($env:VERSION)-Windows-x64.update.zip",
+            "Render-Dock-$($env:VERSION)-Windows-x64.update.json",
+            "SHA256SUMS",
+            "SOURCE.txt"
+          )
+          $names = @($release.assets | ForEach-Object { [string]$_.name })
+          foreach ($name in $required) {
+            if ($name -notin $names) { throw "Published stable release asset missing: $name" }
+          }
+          if ($names | Where-Object { $_ -match 'arm64' }) {
+            throw "Stable Render Dock 1.0.3 release must not contain ARM64 product assets."
+          }
+
+          "Stable Render Dock 1.0.3 release published and verified." >> $env:GITHUB_STEP_SUMMARY
