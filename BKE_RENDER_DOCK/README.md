@@ -68,7 +68,7 @@ For `UpdateAvailable`, Render Dock currently shows informational product UI only
 
 ## What’s in this build
 
-- **Version:** 1.0.2
+- **Version:** 1.0.3
 - **Runtime:** .NET 10, self-contained Windows x64 release
 - **Output root:** `D:\BKE_RENDER_DOCK` with fallback to `C:\BKE_RENDER_DOCK`
 - **On-demand Admin (UAC):** if Windows blocks folder creation, the app may relaunch as Administrator for that product operation
@@ -111,7 +111,7 @@ The generated NuGet files live under `packages/` and are ignored by Git. Render 
 
 - display name: `Render Dock`
 - product ID: `bke-render-dock`
-- current version: `1.0.2`
+- current version: `1.0.3`
 - entry point: `RENDER DOCK.exe`
 - platform: `windows`
 - architecture: `x64`
