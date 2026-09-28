@@ -1,0 +1,205 @@
+
+name: PREPRODUCTION Render Dock 1.0.3 E2E prerelease
+
+on:
+  push:
+    branches:
+      - cert/preproduction-release-v1.0.3
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-dock-1.0.3-preproduction-release
+  cancel-in-progress: false
+
+env:
+  PRODUCT_SOURCE_SHA: 7a7c82bf9c7c135b1c744e6ada550cda356e4da4
+  VERSION: "1.0.3"
+  TAG: v1.0.3-preproduction-e2e
+
+jobs:
+  publish-preproduction-prerelease:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out exact certified product source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PRODUCT_SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact source
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:PRODUCT_SOURCE_SHA) {
+            throw "Render Dock source drifted: expected $env:PRODUCT_SOURCE_SHA, got $actual"
+          }
+
+      - name: Refuse overwrite of existing immutable prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Preproduction release $env:TAG already exists; refusing to overwrite immutable certification evidence."
+          }
+          $global:LASTEXITCODE = 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Prepare pinned BKE SDK capabilities
+        shell: pwsh
+        run: .\scripts\bootstrap-bke-sdk.ps1
+
+      - name: Run Render Dock contracts
+        shell: pwsh
+        run: |
+          dotnet test "RenderDock.Tests/RenderDock.Tests.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Render Dock contracts failed." }
+
+      - name: Publish Windows x64 product
+        shell: pwsh
+        run: .\packaging\windows\publish.ps1
+
+      - name: Build corrected updater payload
+        shell: pwsh
+        run: |
+          .\packaging\windows\build-updater-payload.ps1 -PublishDirectory '.\artifacts\publish\win-x64' -OutputDirectory '.\artifacts\installer'
+          $metadataPath = "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.json"
+          $payloadPath = "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.zip"
+          $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+          $payload = Get-Item -LiteralPath $payloadPath
+          $payloadHash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          if ($metadata.schema -ne 'bke.update-package.v1' -or
+              $metadata.productId -ne 'bke-render-dock' -or
+              $metadata.version -ne $env:VERSION -or
+              $metadata.platform -ne 'windows' -or
+              $metadata.architecture -ne 'x64' -or
+              $metadata.entryPoint -ne 'RENDER DOCK.exe' -or
+              $metadata.sha256 -ne $payloadHash -or
+              [int64]$metadata.bytes -ne $payload.Length) {
+            throw "Render Dock 1.0.3 updater metadata contract invalid."
+          }
+
+          Add-Type -AssemblyName System.IO.Compression
+          $stream = [IO.File]::OpenRead((Resolve-Path $payloadPath))
+          try {
+            $archive = [IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Read,$false)
+            try {
+              $rootEntry = $archive.Entries | Where-Object { $_.FullName -ceq 'RENDER DOCK.exe' } | Select-Object -First 1
+              if ($null -eq $rootEntry) { throw "Corrected updater ZIP is missing exact root RENDER DOCK.exe." }
+            } finally { $archive.Dispose() }
+          } finally { $stream.Dispose() }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Compile Windows x64 installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging/windows/render-dock.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Render Dock 1.0.3 installer compile failed." }
+
+      - name: Build immutable prerelease evidence
+        shell: pwsh
+        run: |
+          $files = @(
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.exe",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.zip",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.json"
+          )
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Prerelease artifact missing: $file"
+            }
+          }
+
+          New-Item -ItemType Directory -Force artifacts/release | Out-Null
+          $hashLines = foreach ($file in $files) {
+            $item = Get-Item -LiteralPath $file
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($item.Name)"
+          }
+          $hashLines | Set-Content artifacts/release/SHA256SUMS -Encoding ascii
+
+          @(
+            "status=PREPRODUCTION",
+            "production_ready=false",
+            "product=Render Dock",
+            "version=$env:VERSION",
+            "product_source_sha=$env:PRODUCT_SOURCE_SHA",
+            "architecture=x64",
+            "purpose=standalone acquisition E2E certification only"
+          ) | Set-Content artifacts/release/SOURCE.txt -Encoding ascii
+
+          @(
+            "# PREPRODUCTION E2E ONLY",
+            "",
+            "This prerelease exists only to certify the real BKE Licensing Agent GitHub-release-backed standalone acquisition path.",
+            "",
+            "- Not production-ready.",
+            "- Not cataloged.",
+            "- Not a stable Render Dock release.",
+            "- Windows x64 only.",
+            "- Do not promote or relabel this prerelease as production.",
+            "",
+            "Product source: $env:PRODUCT_SOURCE_SHA"
+          ) | Set-Content artifacts/release/PREPRODUCTION-NOTES.md -Encoding utf8
+
+      - name: Publish immutable PREPRODUCTION GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseArgs = @(
+            "release","create",$env:TAG,
+            "--repo",$env:GITHUB_REPOSITORY,
+            "--target",$env:PRODUCT_SOURCE_SHA,
+            "--title","Render Dock 1.0.3 PREPRODUCTION E2E ONLY",
+            "--notes-file","artifacts/release/PREPRODUCTION-NOTES.md",
+            "--prerelease",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.exe",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.zip",
+            "artifacts/installer/Render-Dock-$($env:VERSION)-Windows-x64.update.json",
+            "artifacts/release/SHA256SUMS",
+            "artifacts/release/SOURCE.txt"
+          )
+          & gh @releaseArgs
+          if ($LASTEXITCODE -ne 0) { throw "PREPRODUCTION prerelease publication failed." }
+
+      - name: Verify published prerelease identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:TAG" | ConvertFrom-Json
+          if (-not $release.prerelease) { throw "Certification release is not marked prerelease." }
+          if ($release.draft) { throw "Certification prerelease unexpectedly remained draft." }
+          if ([string]$release.target_commitish -ne $env:PRODUCT_SOURCE_SHA) {
+            throw "Prerelease target source drifted."
+          }
+
+          $required = @(
+            "Render-Dock-$($env:VERSION)-Windows-x64.exe",
+            "Render-Dock-$($env:VERSION)-Windows-x64.update.zip",
+            "Render-Dock-$($env:VERSION)-Windows-x64.update.json",
+            "SHA256SUMS",
+            "SOURCE.txt"
+          )
+          $names = @($release.assets | ForEach-Object { [string]$_.name })
+          foreach ($name in $required) {
+            if ($name -notin $names) { throw "Published prerelease asset missing: $name" }
+          }
+          if ($names | Where-Object { $_ -match 'arm64' }) {
+            throw "PREPRODUCTION prerelease must not contain ARM64 product assets."
+          }
+
+          "PREPRODUCTION prerelease published and verified: $env:TAG" >> $env:GITHUB_STEP_SUMMARY
