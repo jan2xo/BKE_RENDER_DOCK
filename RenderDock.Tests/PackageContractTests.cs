@@ -22,7 +22,7 @@ public sealed class PackageContractTests
         Assert.Equal("RENDER DOCK.exe", manifest.RootElement.GetProperty("entryPoint").GetString());
         Assert.Equal("windows", manifest.RootElement.GetProperty("platform").GetString());
         Assert.Equal("x64", manifest.RootElement.GetProperty("architecture").GetString());
-        Assert.Equal("1.0.2", manifest.RootElement.GetProperty("version").GetString());
+        Assert.Equal("1.0.3", manifest.RootElement.GetProperty("version").GetString());
         Assert.Equal(
             project.Descendants("Version").Single().Value,
             manifest.RootElement.GetProperty("version").GetString());

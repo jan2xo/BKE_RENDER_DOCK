@@ -18,7 +18,7 @@ dotnet publish $project `
     --runtime $runtime `
     --self-contained true `
     --output $publishDirectory `
-    /p:Version=1.0.2
+    /p:Version=1.0.3
 if ($LASTEXITCODE -ne 0) { throw 'Render Dock win-x64 publish failed.' }
 
 Copy-Item $manifestSource (Join-Path $publishDirectory 'bke.manifest.json') -Force
@@ -34,7 +34,7 @@ $manifest | ConvertTo-Json -Depth 8 | Set-Content $publishedManifest -Encoding U
 $verifiedManifest = Get-Content $publishedManifest -Raw | ConvertFrom-Json
 if ($verifiedManifest.productId -ne 'bke-render-dock' -or
     $verifiedManifest.displayName -ne 'Render Dock' -or
-    $verifiedManifest.version -ne '1.0.2' -or
+    $verifiedManifest.version -ne '1.0.3' -or
     $verifiedManifest.entryPoint -ne 'RENDER DOCK.exe' -or
     $verifiedManifest.platform -ne 'windows' -or
     $verifiedManifest.architecture -ne 'x64') {
