@@ -1,0 +1,247 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Windows.Forms;
+using System.Media;
+
+namespace CPIO_VIDEO_MAKER
+{
+    public partial class CPIO_SLIDESHOW_MAKER : Form
+    {
+        private List<string> processedImagePaths = new List<string>();
+        private bool isProcessing = false; // Added to track if processing is ongoing.
+        private BackgroundWorker backgroundWorker;
+        private NotifyIcon notifyIcon;
+        private SoundPlayer soundPlayer;
+
+
+        public CPIO_SLIDESHOW_MAKER()
+        {
+            InitializeComponent();
+
+            // Enable drag-and-drop for the form
+            this.AllowDrop = true;
+
+            // Subscribe to the form's DragEnter and DragDrop events
+            this.DragEnter += new DragEventHandler(Form1_DragEnter);
+            this.DragDrop += new DragEventHandler(Form1_DragDrop);
+
+            // Initialize the BackgroundWorker
+            backgroundWorker = new BackgroundWorker();
+            backgroundWorker.DoWork += BackgroundWorker_DoWork;
+            backgroundWorker.RunWorkerCompleted += BackgroundWorker_RunWorkerCompleted;
+            notifyIcon = new NotifyIcon();
+            notifyIcon.Icon = SystemIcons.Application;
+            notifyIcon.Visible = false; // Set to true to show the icon
+
+            // Initialize SoundPlayer
+            soundPlayer = new SoundPlayer();
+        }
+
+        private void Form1_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) && !isProcessing)
+            {
+                e.Effect = DragDropEffects.Copy;
+            }
+        }
+
+        private void Form1_DragDrop(object sender, DragEventArgs e)
+        {
+            if (isProcessing)
+            {
+                return; // Don't process while another processing operation is ongoing.
+            }
+
+            string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            foreach (string file in files)
+            {
+                if (File.Exists(file))
+                {
+                    if (IsImageFile(file))
+                    {
+                        // Process the image and add it to the list
+                        string processedImagePath = ProcessImage(file, processedImagePaths.Count + 1);
+                        processedImagePaths.Add(processedImagePath);
+                    }
+                    else if (IsVideoFile(file))
+                    {
+                        // Ask for audio input via file dialogue
+                        OpenFileDialog openFileDialog1 = new OpenFileDialog();
+                        openFileDialog1.Filter = "Audio Files|*.mp3;*.wav;*.mp4";
+                        openFileDialog1.Title = "Select an Audio File";
+
+                        if (openFileDialog1.ShowDialog() == DialogResult.OK)
+                        {
+                            string audioFilePath = openFileDialog1.FileName;
+                            string outputFileName = $"AlasKwatro_{Path.GetFileNameWithoutExtension(file)}.mp4"; // Use only the original file name without extension
+
+                            // Set the working directory to the directory of the input file
+                            Directory.SetCurrentDirectory(Path.GetDirectoryName(file));
+
+                            // Modify ffmpegCommand with the new input file paths
+                            string ffmpegCommand = $"-stream_loop -1 -i \"{file}\" -i \"{audioFilePath}\" -shortest -map 0:v:0 -map 1:a:0 -y -c:v h264_nvenc -pix_fmt yuv420p \"{outputFileName}\"";
+
+                            // Execute the ffmpeg command for video files
+                            ExecuteFFMpegCommand(ffmpegCommand);
+                        }
+                    }
+                    else
+                    {
+                        // Handle non-image and non-video files (e.g., show an error message)
+                        MessageBox.Show($"File {file} is not a valid image or video file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+
+            // Display an input box for the slideshow title and create slideshow only if images are present
+            if (processedImagePaths.Count > 0)
+            {
+                string slideshowTitle = Microsoft.VisualBasic.Interaction.InputBox("Enter the slideshow title:", "Slideshow Title", "CPIO SLIDESHOW");
+
+                if (!string.IsNullOrWhiteSpace(slideshowTitle))
+                {
+                    // Specify the output folder
+                    string outputFolder = Path.Combine("D:\\GRAPHICS\\", DateTime.Now.ToString("MM-dd-yyyy"));
+
+                    // Create the output folder if it doesn't exist
+                    Directory.CreateDirectory(outputFolder);
+
+                    // Start the BackgroundWorker to create the slideshow
+                    backgroundWorker.RunWorkerAsync(new Tuple<string, string, List<string>>(slideshowTitle, outputFolder, processedImagePaths.ToList()));
+
+                    // Clear the processedImagePaths for the next set of images
+                    processedImagePaths.Clear();
+                }
+            }
+        }
+
+        private void BackgroundWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            // Extract parameters from the argument
+            Tuple<string, string, List<string>> parameters = (Tuple<string, string, List<string>>)e.Argument;
+            string slideshowTitle = parameters.Item1;
+            string outputFolder = parameters.Item2;
+            List<string> imagePaths = parameters.Item3;
+
+            // Create the slideshow with the specified output folder
+            CreateSlideshow(slideshowTitle, outputFolder, imagePaths);
+        }
+
+        private void BackgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            try
+            {
+                // Display a message or perform any UI updates when the BackgroundWorker completes its task
+                //MessageBox.Show("Slideshow created successfully.");
+                // Play a system sound
+                SystemSounds.Question.Play();
+
+                // Show a tray notification
+                notifyIcon.BalloonTipText = "FFmpeg process completed!";
+                notifyIcon.ShowBalloonTip(5000); // 5000 milliseconds (5 seconds) display time
+                isProcessing = false; // Reset processing flag
+            }
+            catch (Exception ex)
+            {
+                // Log or display the exception
+                MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+           
+        }
+
+        private bool IsImageFile(string filePath)
+        {
+            string[] validExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
+            string fileExtension = Path.GetExtension(filePath);
+
+            return validExtensions.Contains(fileExtension.ToLower());
+        }
+
+        private bool IsVideoFile(string filePath)
+        {
+            string[] validExtensions = { ".mp4", ".avi", ".mkv" };
+            string fileExtension = Path.GetExtension(filePath);
+
+            return validExtensions.Contains(fileExtension.ToLower());
+        }
+
+        private void ExecuteFFMpegCommand(string command)
+        {
+            Process ffmpegProcess = new Process();
+            ffmpegProcess.StartInfo.FileName = @"C:\ffmpeg\bin\ffmpeg.exe"; // Replace with your ffmpeg executable path
+            ffmpegProcess.StartInfo.Arguments = command;
+            ffmpegProcess.StartInfo.UseShellExecute = false;
+            ffmpegProcess.StartInfo.RedirectStandardOutput = true;
+            ffmpegProcess.StartInfo.CreateNoWindow = true;
+            ffmpegProcess.Start();
+            ffmpegProcess.WaitForExit();
+        }
+
+        private string ProcessImage(string inputFilePath, int imageIndex)
+        {
+            string outputImagePath = Path.Combine("D:\\GRAPHICS\\TEMP", $"TEMP{imageIndex:D4}.jpg");
+
+            // Run FFmpeg command to process the image
+            string ffmpegCommand = $"-y -i \"{inputFilePath}\" -filter_complex \"[0:v]scale='if(gte(a,16/9),1800,-1)':'if(gte(a,16/9),-1,1012.50)'[fg]; [0:v]scale=1920:1080,format=yuva420p,gblur=sigma=60[bg]; [bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuva420p\" -q:v 1 -frames:v 1 \"{outputImagePath}\"";
+
+            Process ffmpegProcess = new Process();
+            ffmpegProcess.StartInfo.FileName = @"C:\ffmpeg\bin\ffmpeg.exe";
+            ffmpegProcess.StartInfo.Arguments = ffmpegCommand;
+            ffmpegProcess.StartInfo.UseShellExecute = false;
+            ffmpegProcess.StartInfo.RedirectStandardOutput = true;
+            ffmpegProcess.StartInfo.CreateNoWindow = true;
+            ffmpegProcess.Start();
+            ffmpegProcess.WaitForExit();
+
+            return outputImagePath;
+        }
+
+        private void CreateSlideshow(string slideshowTitle, string slideshowFolder, List<string> imagePaths)
+        {
+            if (imagePaths.Count == 0)
+            {
+                MessageBox.Show("No processed images available to create a slideshow.");
+                return;
+            }
+
+            isProcessing = true; // Set processing flag
+
+            // Check if the final slideshow file already exists
+            string finalSlideshowFilePath = Path.Combine(slideshowFolder, $"{slideshowTitle}.mp4");
+            if (File.Exists(finalSlideshowFilePath))
+            {
+                MessageBox.Show($"Slideshow file {finalSlideshowFilePath} already exists in the output folder. Skipping.");
+                isProcessing = false; // Reset processing flag
+                return;
+            }
+
+            // Run FFmpeg command to create the slideshow
+            string imageList = string.Join("|", Enumerable.Range(1, imagePaths.Count).Select(i => $"TEMP{i:D4}.jpg"));
+            string ffmpegCommand = $"-framerate 30 -i D:/GRAPHICS/TEMP/TEMP%04d.jpg -vf \"scale=8000:-1,setsar=1,zoompan=z='zoom+0.001':x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=90:s=1920x1080:fps=30\" -t {imagePaths.Count * 3} -c:v h264_nvenc -pix_fmt yuv420p \"{finalSlideshowFilePath}\"";
+
+            ExecuteFFMpegCommand(ffmpegCommand);
+
+            // Delete the processed image files after creating the slideshow
+            foreach (string processedImagePath in imagePaths)
+            {
+                File.Delete(processedImagePath);
+            }
+
+            // You can also perform additional actions or UI updates after the slideshow creation here
+
+            // Notify the BackgroundWorker that the operation is completed
+            backgroundWorker.ReportProgress(0);
+        }
+        private void CPIO_SLIDESHOW_MAKER_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            notifyIcon.Dispose();
+            soundPlayer.Dispose();
+        }
+    }
+}

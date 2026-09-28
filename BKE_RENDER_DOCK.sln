@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34024.191
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RENDER DOCK", "BKE_RENDER_DOCK\RENDER DOCK.csproj", "{2F6B22CE-17E0-4AD1-8061-2483B9ADE239}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2F6B22CE-17E0-4AD1-8061-2483B9ADE239}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F6B22CE-17E0-4AD1-8061-2483B9ADE239}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2F6B22CE-17E0-4AD1-8061-2483B9ADE239}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2F6B22CE-17E0-4AD1-8061-2483B9ADE239}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {373DF7CB-4836-481B-A26E-9F54A63E9D54}
+	EndGlobalSection
+EndGlobal
