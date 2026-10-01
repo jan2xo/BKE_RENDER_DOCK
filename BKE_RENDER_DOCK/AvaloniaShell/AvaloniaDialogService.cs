@@ -29,7 +29,7 @@ namespace BKE_MediaTools.AvaloniaShell
             {
                 Content = "OK",
                 MinWidth = 90,
-                HorizontalAlignment = HorizontalAlignment.Right
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
             };
             ok.Click += (_, _) => dialog.Close();
             root.Children.Add(ok);
@@ -112,7 +112,7 @@ namespace BKE_MediaTools.AvaloniaShell
             var input = new Avalonia.Controls.TextBox
             {
                 MinWidth = 430,
-                HorizontalAlignment = HorizontalAlignment.Stretch
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch
             };
             root.Children.Add(input);
 
@@ -181,8 +181,8 @@ namespace BKE_MediaTools.AvaloniaShell
         private static Avalonia.Controls.StackPanel CreateButtons() =>
             new()
             {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
                 Spacing = 8
             };
 

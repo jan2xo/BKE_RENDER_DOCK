@@ -31,8 +31,8 @@ namespace BKE_MediaTools.AvaloniaShell
         private void OnDragOver(object? sender, Avalonia.Input.DragEventArgs e)
         {
             e.DragEffects = e.DataTransfer.Formats.Contains(DataFormat.File)
-                ? DragDropEffects.Copy
-                : DragDropEffects.None;
+                ? Avalonia.Input.DragDropEffects.Copy
+                : Avalonia.Input.DragDropEffects.None;
         }
 
         private async void OnDrop(object? sender, Avalonia.Input.DragEventArgs e)
