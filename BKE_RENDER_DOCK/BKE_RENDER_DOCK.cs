@@ -312,7 +312,7 @@ namespace BKE_MediaTools
             });
         }
 
-        public DetectedAudioChoice ChooseDetectedAudio(IReadOnlyList<string> audios, string? bestAudio)
+        DetectedAudioChoice IRenderDockInteraction.ChooseDetectedAudio(IReadOnlyList<string> audios, string? bestAudio)
         {
             var dlg = MessageBox.Show(
                 $"Found {audios.Count} audio file(s).\nUse best match?\n→ {Path.GetFileName(bestAudio)}",
@@ -350,7 +350,7 @@ namespace BKE_MediaTools
             return ofd.ShowDialog() == DialogResult.OK ? ofd.FileName : null;
         }
 
-        public LoopPolicy GetLoopPolicy()
+        LoopPolicy IRenderDockInteraction.GetLoopPolicy()
         {
             if (!RenderEngine.PromptForLoopPolicy) return RenderEngine.DefaultLoopPolicy;
             return AskLoopPolicy();

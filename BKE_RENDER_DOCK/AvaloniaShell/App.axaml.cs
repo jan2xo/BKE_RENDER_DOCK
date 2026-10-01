@@ -4,7 +4,7 @@ using Avalonia.Markup.Xaml;
 
 namespace BKE_MediaTools.AvaloniaShell
 {
-    internal partial class App : Application
+    internal partial class App : Avalonia.Application
     {
         public override void Initialize()
         {
