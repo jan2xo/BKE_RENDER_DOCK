@@ -84,8 +84,8 @@ public sealed class PackageContractTests
     {
         var agent = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentClient.cs"));
-        var program = File.ReadAllText(Path.Combine(
-            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var startupGate = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Startup", "ProductStartupGate.cs"));
 
         Assert.Contains("BkeLicensingClient.Create", agent);
         Assert.Contains("EnsureAuthorizedAsync", agent);
@@ -94,9 +94,9 @@ public sealed class PackageContractTests
         Assert.DoesNotContain("127.0.0.1:43873", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("/v1/authorize", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("/v1/license-center/open", agent, StringComparison.Ordinal);
-        Assert.Contains("AuthorizationStatus.Authorized", program);
-        Assert.Contains("AuthorizationStatus.ActivationCancelled", program);
-        Assert.DoesNotContain("AuthorizationStatus.ActivationRequired", program);
+        Assert.Contains("AuthorizationStatus.Authorized", startupGate);
+        Assert.Contains("AuthorizationStatus.ActivationCancelled", startupGate);
+        Assert.DoesNotContain("AuthorizationStatus.ActivationRequired", startupGate);
         Assert.False(File.Exists(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AuthorizationResult.cs")));
     }
@@ -196,28 +196,28 @@ public sealed class PackageContractTests
     {
         var client = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "EnterpriseSessionClient.cs"));
-        var program = File.ReadAllText(Path.Combine(
-            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var startupGate = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Startup", "ProductStartupGate.cs"));
         var coordinator = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Updates", "UpdateCoordinator.cs"));
 
         Assert.Contains("operation = \"redeem\"", client);
         Assert.Contains("NamedPipeClientStream", client);
-        Assert.Contains("TryRedeemAsync", program);
+        Assert.Contains("TryRedeemAsync", startupGate);
         Assert.Contains("if (enterpriseSession)", coordinator);
         Assert.DoesNotContain("Environment.GetCommandLineArgs", client, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Environment.GetCommandLineArgs", program, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Environment.GetCommandLineArgs", startupGate, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void StandaloneLicensingRemainsFallbackWhenEnterpriseRedemptionFails()
     {
-        var program = File.ReadAllText(Path.Combine(
-            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var startupGate = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Startup", "ProductStartupGate.cs"));
 
-        var redeem = program.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
-        var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
-        var standalone = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
+        var redeem = startupGate.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
+        var fallback = startupGate.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
+        var standalone = startupGate.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
         Assert.True(redeem >= 0 && fallback > redeem && standalone > fallback);
     }
 

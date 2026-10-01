@@ -1,8 +1,6 @@
-using BKE.Desktop.Licensing;
-using BKE_MediaTools.Licensing;
 using BKE_MediaTools.Notifications;
+using BKE_MediaTools.Startup;
 using BKE_MediaTools.Updates;
-using static BKE_MediaTools.BKE_RenderDock;
 
 namespace BKE_MediaTools
 {
@@ -23,61 +21,17 @@ namespace BKE_MediaTools
 
             ApplicationConfiguration.Initialize();
 
-            bool enterpriseSession;
-            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+            var startup = ProductStartupGate
+                .EvaluateAsync(new WinFormsStartupInteraction())
+                .GetAwaiter()
+                .GetResult();
+
+            if (!startup.ContinueStartup)
             {
-                enterpriseSession = new EnterpriseSessionClient()
-                    .TryRedeemAsync(timeout.Token)
-                    .GetAwaiter()
-                    .GetResult();
+                return;
             }
 
-            // Product broadcasts are informational and intentionally run before the
-            // licensing gate so beta/trial/support-end notices remain visible even
-            // when licensing subsequently denies application startup.
-            NotificationCoordinator.ShowBeforeLicensing(enterpriseSession);
-
-            if (!enterpriseSession)
-            {
-                bool graceActive;
-                using (var gracePeriodClient = new GracePeriodClient())
-                {
-                    graceActive = gracePeriodClient.IsActiveAsync().GetAwaiter().GetResult();
-                }
-
-                if (!graceActive)
-                {
-                    AuthorizationResult authorization;
-                    using (var agentClient = new AgentClient())
-                    {
-                        authorization = agentClient.EnsureAuthorizedAsync().GetAwaiter().GetResult();
-                    }
-
-                    if (authorization.Status == AuthorizationStatus.ActivationCancelled)
-                    {
-                        return;
-                    }
-
-                    if (authorization.Status is AuthorizationStatus.AgentUnavailable or AuthorizationStatus.Timeout)
-                    {
-                        AgentRecoveryDialog.ShowRecovery();
-                        return;
-                    }
-
-                    if (authorization.Status != AuthorizationStatus.Authorized)
-                    {
-                        MessageBox.Show(
-                            "Render Dock could not establish a valid license for this installation. " +
-                            "Use BKE License Center to activate or repair licensing.",
-                            "Render Dock Licensing",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning);
-                        return;
-                    }
-                }
-            }
-
-            FfmpegBootstrap.EnsurePresentOrOffer();
+            var enterpriseSession = startup.EnterpriseSession;
             var mainForm = new BKE_RenderDock();
             UpdateCoordinator.Attach(mainForm, enterpriseSession);
             NotificationCoordinator.Attach(mainForm, enterpriseSession);
