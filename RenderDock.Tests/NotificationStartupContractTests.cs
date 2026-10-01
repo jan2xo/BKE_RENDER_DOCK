@@ -9,20 +9,23 @@ public sealed class NotificationStartupContractTests
     [Fact]
     public void ProductBroadcastPreflightRunsBeforeStandaloneLicensingGate()
     {
-        var program = File.ReadAllText(Path.Combine(
-            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var startupGate = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Startup", "ProductStartupGate.cs"));
+        var interaction = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Startup", "WinFormsStartupInteraction.cs"));
         var coordinator = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Notifications", "NotificationCoordinator.cs"));
 
-        var preflight = program.IndexOf(
-            "NotificationCoordinator.ShowBeforeLicensing(enterpriseSession)",
+        var preflight = startupGate.IndexOf(
+            "ShowNotificationsBeforeLicensingAsync",
             StringComparison.Ordinal);
-        var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
-        var authorize = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
+        var fallback = startupGate.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
+        var authorize = startupGate.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
 
         Assert.True(preflight >= 0, "Notification preflight is not composed.");
         Assert.True(fallback > preflight, "Notification preflight must run before standalone licensing fallback.");
         Assert.True(authorize > preflight, "Notification preflight must run before Agent authorization.");
+        Assert.Contains("NotificationCoordinator.ShowBeforeLicensing", interaction);
         Assert.Contains("ShowUnreadAsync(owner: null, enterpriseSession)", coordinator);
         Assert.Contains("Notifications are informational and must never block", coordinator);
         Assert.DoesNotContain("HttpClient", coordinator, StringComparison.Ordinal);

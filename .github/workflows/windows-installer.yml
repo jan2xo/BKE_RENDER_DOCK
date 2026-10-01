@@ -1,7 +1,6 @@
 name: Render Dock Windows x64 certification
 
 on:
-  pull_request:
   push:
     branches: [ main ]
   workflow_dispatch:
