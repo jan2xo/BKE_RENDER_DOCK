@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BKE_MediaTools.AvaloniaShell.RenderDockWindow"
+        Width="449"
+        Height="450"
+        MinWidth="449"
+        MinHeight="450"
+        MaxWidth="449"
+        MaxHeight="450"
+        Title="Render Dock"
+        WindowStartupLocation="CenterScreen">
+  <Border Padding="24">
+    <Grid RowDefinitions="Auto,*">
+      <TextBlock Text="Render Dock"
+                 FontSize="24"
+                 FontWeight="SemiBold"
+                 HorizontalAlignment="Center" />
+      <Border Grid.Row="1"
+              Margin="0,24,0,0"
+              BorderThickness="2"
+              BorderBrush="{DynamicResource ThemeForegroundLowBrush}"
+              CornerRadius="12"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Spacing="8">
+          <TextBlock Text="Drop files here"
+                     FontSize="20"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="Avalonia shell — rendering engine remains unchanged"
+                     Opacity="0.65"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>
