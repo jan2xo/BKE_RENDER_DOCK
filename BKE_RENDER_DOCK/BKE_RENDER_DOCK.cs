@@ -226,6 +226,20 @@ namespace BKE_MediaTools
         private CancellationTokenSource? _cts;
         private readonly NotifyIcon _notify;
 
+        public BKE_RenderDock()
+        {
+            InitializeComponent();
+            AllowDrop = true;
+            DragEnter += Form_DragEnter;
+            DragDrop += Form_DragDrop;
+
+            Directory.CreateDirectory(RenderEngine.OutputRoot);
+            Directory.CreateDirectory(RenderEngine.TempRoot);
+
+            _notify = new NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Visible = true };
+            FormClosed += (_, __) => _notify.Dispose();
+        }
+
         // ======== DND ========
         private void Form_DragEnter(object? sender, DragEventArgs e)
         {
