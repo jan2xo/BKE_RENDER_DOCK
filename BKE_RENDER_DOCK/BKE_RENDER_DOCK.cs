@@ -221,133 +221,10 @@ namespace BKE_MediaTools
             private static string Quote(string s) => s.Contains(' ') ? $"\"{s}\"" : s;
         }
 
-        // ======== CONFIG ========
-
-        private static class AppConfig
-        {
-            public static readonly string FFmpegPath = @"C:\\ffmpeg\\bin\\ffmpeg.exe"; // adjust if needed
-
-            // Dynamically resolved roots (prefer D:\, fall back to C:\)
-            public static readonly string OutputRoot;
-            public static readonly string TempRoot;
-
-            public const int Fps = 30;
-            public const int SecondsPerImage = 3; // each image shows ~3s
-            public const bool AlwaysPromptForAudioOnSingleVideo = true;
-            public const bool AlwaysPromptForAudioOnSlideshow = true;
-            public const bool AlwaysPromptForAudioOnCombineVideos = true;
-            public const bool AlwaysPromptForAudioOnMixed = true;
-            public const bool PromptForLoopPolicy = true;
-            public static readonly LoopPolicy DefaultLoopPolicy = LoopPolicy.Shortest;
-            public const string OutputCodec = "h264_nvenc"; // fall back to libx264 if no NVENC
-
-
-            // Prefer a ready, fixed D:\ drive; else C:\
-            private static string SelectRoot()
-            {
-                var d = DriveInfo
-                    .GetDrives()
-                    .FirstOrDefault(dr =>
-                        dr.IsReady &&
-                        dr.DriveType == DriveType.Fixed &&
-                        dr.Name.StartsWith("D:", StringComparison.OrdinalIgnoreCase));
-                return d?.Name ?? @"C:\";
-            }
-
-            // Create needed folders; elevate if blocked by permissions
-            private static void EnsurePathsOrElevate()
-            {
-                try
-                {
-                    Directory.CreateDirectory(AppConfig.OutputRoot);
-                    Directory.CreateDirectory(AppConfig.TempRoot);
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    if (!IsAdministrator())
-                    {
-                        // Ask for admin, then quit this instance
-                        RelaunchAsAdministrator();
-                        Environment.Exit(0);
-                    }
-                    else
-                    {
-                        // Already admin but still blocked → surface the error
-                        throw;
-                    }
-                }
-            }
-
-            private static bool IsAdministrator()
-            {
-                using var id = WindowsIdentity.GetCurrent();
-                var principal = new WindowsPrincipal(id);
-                return principal.IsInRole(WindowsBuiltInRole.Administrator);
-            }
-
-            private static void RelaunchAsAdministrator()
-            {
-                var exe = Process.GetCurrentProcess().MainModule!.FileName!;
-                var args = string.Join(" ",
-                    Environment.GetCommandLineArgs().Skip(1).Select(Quote));
-
-                var psi = new ProcessStartInfo(exe, args)
-                {
-                    Verb = "runas",            // triggers UAC
-                    UseShellExecute = true,
-                    WorkingDirectory = Environment.CurrentDirectory
-                };
-
-                try
-                {
-                    Process.Start(psi);
-                }
-                catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // user canceled UAC
-                {
-                    MessageBox.Show("Administrator permission is required to create output folders.",
-                                    "BKE RenderDock", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            }
-
-            private static string Quote(string s) => s.Contains(' ') ? $"\"{s}\"" : s;
-
-
-
-            static AppConfig()
-            {
-                string root = SelectRoot(); // D:\ if available; else C:\
-                OutputRoot = Path.Combine(root, "BKE_RENDER_DOCK");
-                TempRoot = Path.Combine(OutputRoot, "TEMP");
-                EnsurePathsOrElevate();
-            }
-        }
-
-
-
-
-        // ======== TYPES ========
-        private enum JobType { SlideshowFromFolder, SlideshowFromImages, CombineVideos, AddAudioToVideo, TranscodeSingleVideo, SlideshowThenVideos, SaveProcessedImage }
-        private enum LoopPolicy { Shortest, LoopVideoToAudio, LoopAudioToVideo }
-        private record WorkItem(JobType Type, string Title, string OutputFolder, string SessionFolder, List<string> Inputs, string? AudioPath = null, List<string>? ExtraVideos = null, LoopPolicy? LoopMode = null);
-
-        private readonly ConcurrentQueue<WorkItem> _queue = new();
+        private readonly ConcurrentQueue<RenderJob> _queue = new();
         private bool _isWorking = false;
         private CancellationTokenSource? _cts;
         private readonly NotifyIcon _notify;
-
-        public BKE_RenderDock()
-        {
-            InitializeComponent();
-            AllowDrop = true;
-            DragEnter += Form_DragEnter;
-            DragDrop += Form_DragDrop;
-
-            Directory.CreateDirectory(AppConfig.OutputRoot);
-            Directory.CreateDirectory(AppConfig.TempRoot);
-
-            _notify = new NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Visible = true };
-            FormClosed += (_, __) => _notify.Dispose();
-        }
 
         // ======== DND ========
         private void Form_DragEnter(object? sender, DragEventArgs e)
@@ -384,7 +261,7 @@ namespace BKE_MediaTools
                         string folderName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                         // temp session path (assigned only if needed)
                         string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                        string session = Path.Combine(AppConfig.TempRoot, $"{stamp}_{Sanitize(folderName)}");
+                        string session = Path.Combine(RenderEngine.TempRoot, $"{stamp}_{RenderEngine.Sanitize(folderName)}");
                         
 
                         var files = Directory.GetFiles(path);
@@ -409,16 +286,16 @@ namespace BKE_MediaTools
                             var processed = new List<string>();
                             for (int i = 0; i < imgs.Count; i++)
                             {
-                                processed.Add(ProcessImage(imgs[i], i + 1, session));
+                                processed.Add(RenderEngine.ProcessImage(imgs[i], i + 1, session));
                             }
 
-                            _queue.Enqueue(new WorkItem(
-                                JobType.SlideshowThenVideos,
+                            _queue.Enqueue(new RenderJob(
+                                RenderJobType.SlideshowThenVideos,
                                 folderName,
-                                EnsureDatedOutput(),
+                                RenderEngine.EnsureDatedOutput(),
                                 session,
                                 processed,
-                                ChooseBestAudio(auds),
+                                RenderEngine.ChooseBestAudio(auds),
                                 vids,
                                 auds.Any() ? GetLoopPolicy() : null
                             ));
@@ -431,12 +308,12 @@ namespace BKE_MediaTools
                             var processed = new List<string>();
                             for (int i = 0; i < imgs.Count; i++)
                             {
-                                processed.Add(ProcessImage(imgs[i], i + 1, session));
+                                processed.Add(RenderEngine.ProcessImage(imgs[i], i + 1, session));
                             }
-                            _queue.Enqueue(new WorkItem(
-                                JobType.SlideshowFromFolder, 
+                            _queue.Enqueue(new RenderJob(
+                                RenderJobType.SlideshowFromFolder, 
                                 folderName, 
-                                EnsureDatedOutput(), 
+                                RenderEngine.EnsureDatedOutput(), 
                                 session, 
                                 processed, 
                                 auds.FirstOrDefault(), null,
@@ -449,9 +326,9 @@ namespace BKE_MediaTools
                         if (vids.Count >= 2)
                         {  
                             string? audioPath = auds.FirstOrDefault();
-                            _queue.Enqueue(new WorkItem(JobType.CombineVideos,
+                            _queue.Enqueue(new RenderJob(RenderJobType.CombineVideos,
                                 folderName + "_combined",
-                                EnsureDatedOutput(),
+                                RenderEngine.EnsureDatedOutput(),
                                 "",
                                 vids,
                                 audioPath,
@@ -461,24 +338,24 @@ namespace BKE_MediaTools
                         }
                         else if (vids.Count == 1)
                         {
-                            string? audioPath = auds.Count > 0 ? ChooseBestAudio(auds) : null;
+                            string? audioPath = auds.Count > 0 ? RenderEngine.ChooseBestAudio(auds) : null;
                             if (!string.IsNullOrEmpty(audioPath))
                             {
-                                _queue.Enqueue(new WorkItem(JobType.AddAudioToVideo, Path.GetFileNameWithoutExtension(vids[0]), EnsureDatedOutput(), "", new List<string> { vids[0] }, audioPath, null, GetLoopPolicy()));
+                                _queue.Enqueue(new RenderJob(RenderJobType.AddAudioToVideo, Path.GetFileNameWithoutExtension(vids[0]), RenderEngine.EnsureDatedOutput(), "", new List<string> { vids[0] }, audioPath, null, GetLoopPolicy()));
                                 continue;
                             }
                             else
                             {
-                                _queue.Enqueue(new WorkItem(JobType.TranscodeSingleVideo, Path.GetFileNameWithoutExtension(vids[0]), EnsureDatedOutput(), "", new List<string> { vids[0] }));
+                                _queue.Enqueue(new RenderJob(RenderJobType.TranscodeSingleVideo, Path.GetFileNameWithoutExtension(vids[0]), RenderEngine.EnsureDatedOutput(), "", new List<string> { vids[0] }));
                                 continue;
                             }
                         }
                     }
                     else if (File.Exists(path))
                     {
-                        if (IsImageFile(path)) images.Add(path);
-                        else if (IsVideoFile(path)) videos.Add(path);
-                        else if (IsAudioFile(path)) audios.Add(path);
+                        if (RenderEngine.IsImageFile(path)) images.Add(path);
+                        else if (RenderEngine.IsVideoFile(path)) videos.Add(path);
+                        else if (RenderEngine.IsAudioFile(path)) audios.Add(path);
                         continue;
                     }
                 }
@@ -495,18 +372,18 @@ namespace BKE_MediaTools
                     if (!string.IsNullOrWhiteSpace(title)) 
                     {
                         string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                        string session = Path.Combine(AppConfig.TempRoot, $"{stamp}_{Sanitize(title)}");
+                        string session = Path.Combine(RenderEngine.TempRoot, $"{stamp}_{RenderEngine.Sanitize(title)}");
                         Directory.CreateDirectory(session);
 
                         var processed = new List<string>();
                         for (int i = 0; i < images.Count; i++)
-                            processed.Add(ProcessImage(images[i], i + 1, session)); // ensure TEMP0001.jpg pattern if your ffmpeg expects it
+                            processed.Add(RenderEngine.ProcessImage(images[i], i + 1, session)); // ensure TEMP0001.jpg pattern if your ffmpeg expects it
 
                         // Audio selection (optional)
                         string? audioPath = null;
                         if (audios.Any())
                         {
-                            var best = ChooseBestAudio(audios);
+                            var best = RenderEngine.ChooseBestAudio(audios);
                             var dlg = MessageBox.Show(
                                 $"Found {audios.Count} audio file(s).\nUse best match?\n→ {Path.GetFileName(best)}",
                                 "Add background audio?",
@@ -517,7 +394,7 @@ namespace BKE_MediaTools
                             else if (dlg == DialogResult.No) audioPath = PromptForAudioFile(); // may be null
                             else return; // Cancel the whole mixed job if user hit Cancel
                         }
-                        else if (AppConfig.AlwaysPromptForAudioOnMixed)
+                        else if (RenderEngine.AlwaysPromptForAudioOnMixed)
                         {
                             if (MessageBox.Show("No audio detected. Browse one?", "Add audio?",
                                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
@@ -526,10 +403,10 @@ namespace BKE_MediaTools
 
                         var policy = audioPath != null ? GetLoopPolicy() : (LoopPolicy?)null;
 
-                        _queue.Enqueue(new WorkItem(
-                            JobType.SlideshowThenVideos,
+                        _queue.Enqueue(new RenderJob(
+                            RenderJobType.SlideshowThenVideos,
                             title,
-                            EnsureDatedOutput(),
+                            RenderEngine.EnsureDatedOutput(),
                             session,
                             processed,
                             audioPath,
@@ -546,13 +423,13 @@ namespace BKE_MediaTools
                     if (!string.IsNullOrWhiteSpace(title))
                     {
                         string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                        string session = Path.Combine(AppConfig.TempRoot, $"{stamp}_{Sanitize(title)}");
+                        string session = Path.Combine(RenderEngine.TempRoot, $"{stamp}_{RenderEngine.Sanitize(title)}");
                         Directory.CreateDirectory(session);
 
-                        _queue.Enqueue(new WorkItem(
-                            JobType.SaveProcessedImage,
+                        _queue.Enqueue(new RenderJob(
+                            RenderJobType.SaveProcessedImage,
                             title,
-                            EnsureDatedOutput(),
+                            RenderEngine.EnsureDatedOutput(),
                             session,
                             new List<string> { images[0] }
                         ));
@@ -566,21 +443,21 @@ namespace BKE_MediaTools
                     if (!string.IsNullOrWhiteSpace(title))
                     {
                         string stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                        string session = Path.Combine(AppConfig.TempRoot, $"{stamp}_{Sanitize(title)}");
+                        string session = Path.Combine(RenderEngine.TempRoot, $"{stamp}_{RenderEngine.Sanitize(title)}");
                         Directory.CreateDirectory(session);
 
                         var processed = new List<string>();
                         for (int i = 0; i < images.Count; i++)
-                            processed.Add(ProcessImage(images[i], i + 1, session));
+                            processed.Add(RenderEngine.ProcessImage(images[i], i + 1, session));
 
                         string? audioPath = audios.FirstOrDefault();
-                        if (audioPath == null && AppConfig.AlwaysPromptForAudioOnSlideshow)
+                        if (audioPath == null && RenderEngine.AlwaysPromptForAudioOnSlideshow)
                             audioPath = PromptForAudioFile();
 
-                        _queue.Enqueue(new WorkItem(
-                            JobType.SlideshowFromImages,
+                        _queue.Enqueue(new RenderJob(
+                            RenderJobType.SlideshowFromImages,
                             title,
-                            EnsureDatedOutput(),
+                            RenderEngine.EnsureDatedOutput(),
                             session,
                             processed,
                             audioPath,
@@ -596,13 +473,13 @@ namespace BKE_MediaTools
                     string outputName = Prompt("Enter the combined video title:", "CombinedVideo") ?? "CombinedVideo";
 
                     string? audioPath = audios.FirstOrDefault();
-                    if (audioPath == null && AppConfig.AlwaysPromptForAudioOnCombineVideos)
+                    if (audioPath == null && RenderEngine.AlwaysPromptForAudioOnCombineVideos)
                         audioPath = PromptForAudioFile();
 
-                    _queue.Enqueue(new WorkItem(
-                        JobType.CombineVideos,
+                    _queue.Enqueue(new RenderJob(
+                        RenderJobType.CombineVideos,
                         outputName,
-                        EnsureDatedOutput(),
+                        RenderEngine.EnsureDatedOutput(),
                         "",      // no image session needed
                         videos,
                         audioPath,
@@ -615,15 +492,15 @@ namespace BKE_MediaTools
                 {
                     // SINGLE VIDEO
                     string? audioPath = audios.FirstOrDefault();
-                    if (audioPath == null && AppConfig.AlwaysPromptForAudioOnSingleVideo)
+                    if (audioPath == null && RenderEngine.AlwaysPromptForAudioOnSingleVideo)
                         audioPath = PromptForAudioFile();
 
                     if (!string.IsNullOrEmpty(audioPath))
                     {
-                        _queue.Enqueue(new WorkItem(
-                            JobType.AddAudioToVideo,
+                        _queue.Enqueue(new RenderJob(
+                            RenderJobType.AddAudioToVideo,
                             Path.GetFileNameWithoutExtension(videos[0]),
-                            EnsureDatedOutput(),
+                            RenderEngine.EnsureDatedOutput(),
                             "",
                             new List<string> { videos[0] },
                             audioPath,
@@ -634,10 +511,10 @@ namespace BKE_MediaTools
                     }
                     else
                     {
-                        _queue.Enqueue(new WorkItem(
-                            JobType.TranscodeSingleVideo,
+                        _queue.Enqueue(new RenderJob(
+                            RenderJobType.TranscodeSingleVideo,
                             Path.GetFileNameWithoutExtension(videos[0]),
-                            EnsureDatedOutput(),
+                            RenderEngine.EnsureDatedOutput(),
                             "",
                             new List<string> { videos[0] }
                         ));
@@ -672,28 +549,7 @@ namespace BKE_MediaTools
                 try
                 {
                     Notify("BKE RenderDock", $"Starting: {job.Title} ({job.Type})");
-                    switch (job.Type)
-                    {
-                        case JobType.SlideshowFromFolder:
-                        case JobType.SlideshowFromImages:
-                            await BuildSlideshowAsync(job, ct);
-                            break;
-                        case JobType.CombineVideos:
-                            await CombineVideosAsync(job, ct);
-                            break;
-                        case JobType.SlideshowThenVideos:
-                            await BuildSlideshowThenVideosAsync(job, ct);
-                            break;
-                        case JobType.SaveProcessedImage:
-                            await SaveProcessedImageAsync(job, ct);
-                            break;
-                        case JobType.AddAudioToVideo:
-                            await AddAudioToVideoAsync(job, ct);
-                            break;
-                        case JobType.TranscodeSingleVideo:
-                            await TranscodeSingleVideoAsync(job, ct);
-                            break;
-                    }
+                    await RenderEngine.ExecuteAsync(job, ct);
                     Notify("BKE RenderDock", $"Done: {job.Title}");
                 }
                 catch (Exception ex)
@@ -705,256 +561,6 @@ namespace BKE_MediaTools
 
             System.Media.SystemSounds.Question.Play();
             Notify("BKE RenderDock", "All queued renders are done.", 5000);
-        }
-
-        // ======== OPERATIONS ========
-        private async Task SaveProcessedImageAsync(WorkItem job, CancellationToken ct)
-        {
-            // job.Inputs[0] is the original image path
-            string src = job.Inputs[0];
-            string processed = ProcessImage(src, 1, job.SessionFolder);
-            string outPath = Path.Combine(job.OutputFolder, $"{Sanitize(job.Title)}.jpg");
-            try { if (File.Exists(outPath)) File.Delete(outPath); } catch { }
-            File.Move(processed, outPath);
-            TryDeleteFolder(job.SessionFolder);
-            await Task.CompletedTask;
-        }
-
-        private async Task BuildSlideshowAsync(WorkItem job, CancellationToken ct)
-        {
-            if (job.Inputs.Count == 0) return;
-
-            string tempSlide = Path.Combine(job.SessionFolder, "_slideshow.mp4");
-            string pattern = Path.Combine(job.SessionFolder, "TEMP%04d.jpg");
-            int totalSeconds = job.Inputs.Count * AppConfig.SecondsPerImage;
-            string vf = $"scale=8000:-1,setsar=1,zoompan=z='zoom+0.001':x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d={AppConfig.Fps * AppConfig.SecondsPerImage}:s=1920x1080:fps={AppConfig.Fps}";
-
-            // 1) Render slideshow video (silent)
-            string slideArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -framerate {AppConfig.Fps} -i \"{pattern}\" -vf \"{vf}\" -t {totalSeconds} -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -max_muxing_queue_size 2048 \"{tempSlide}\"";
-            await RunFfmpegAsync(slideArgs, ct);
-
-            string outputPath = Path.Combine(job.OutputFolder, $"{Sanitize(job.Title)}.mp4");
-
-            // 2) If audio is present, mux with chosen loop policy; else move/copy
-            if (!string.IsNullOrWhiteSpace(job.AudioPath))
-            {
-                var mode = job.LoopMode ?? AppConfig.DefaultLoopPolicy;
-                string args;
-                switch (mode)
-                {
-                    case LoopPolicy.LoopVideoToAudio:
-                        args = $"-y -nostdin -hide_banner -loglevel error -nostats -stream_loop -1 -i \"{tempSlide}\" -i \"{job.AudioPath}\" -shortest -map 0:v -map 1:a -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-                    case LoopPolicy.LoopAudioToVideo:
-                        args = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{tempSlide}\" -stream_loop -1 -i \"{job.AudioPath}\" -shortest -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-                    default:
-                        args = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{tempSlide}\" -i \"{job.AudioPath}\" -shortest -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-                }
-                await RunFfmpegAsync(args, ct);
-            }
-            else
-            {
-                // no audio -> temp is final
-                try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
-                File.Move(tempSlide, outputPath);
-            }
-
-            TryDeleteFolder(job.SessionFolder);
-        }
-
-        private async Task BuildSlideshowThenVideosAsync(WorkItem job, CancellationToken ct)
-        {
-            if (job.Inputs.Count == 0 || job.ExtraVideos == null || job.ExtraVideos.Count == 0) return;
-
-            // 1) Render slideshow MP4 (silent)
-            string slideshowPath = Path.Combine(job.SessionFolder, "_slideshow.mp4");
-            int totalSeconds = job.Inputs.Count * AppConfig.SecondsPerImage;
-            string pattern = Path.Combine(job.SessionFolder, "TEMP%04d.jpg");
-            string vf = $"scale=8000:-1,setsar=1,zoompan=z='zoom+0.001':x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d={AppConfig.Fps * AppConfig.SecondsPerImage}:s=1920x1080:fps={AppConfig.Fps}";
-            string slideArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -framerate {AppConfig.Fps} -i \"{pattern}\" -vf \"{vf}\" -t {totalSeconds} -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -max_muxing_queue_size 2048 \"{slideshowPath}\"";
-            await RunFfmpegAsync(slideArgs, ct);
-
-            // 2) Normalize each video
-            var normalized = new List<string> { slideshowPath };
-            int idx = 0;
-            foreach (var v in job.ExtraVideos)
-            {
-                string outVid = Path.Combine(job.SessionFolder, $"_norm_{idx++:000}.mp4");
-                string normArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{v}\" -vf scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps={AppConfig.Fps} -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -vsync cfr -an -max_muxing_queue_size 2048 \"{outVid}\"";
-                await RunFfmpegAsync(normArgs, ct);
-                normalized.Add(outVid);
-            }
-
-            // 3) Concat list
-            string listPath = Path.Combine(job.SessionFolder, "_concat.txt");
-            File.WriteAllLines(listPath, normalized.Select(p => $"file '{p.Replace("'", "'\\''")}'"));
-
-            string joinedPath = Path.Combine(job.SessionFolder, "_joined.mp4");
-            string concatArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -f concat -safe 0 -i \"{listPath}\" -c copy -an \"{joinedPath}\"";
-            await RunFfmpegAsync(concatArgs, ct);
-
-            string outputPath = Path.Combine(job.OutputFolder, $"{Sanitize(job.Title)}.mp4");
-
-            if (!string.IsNullOrWhiteSpace(job.AudioPath))
-            {
-                var mode = job.LoopMode ?? AppConfig.DefaultLoopPolicy;
-                string finalArgs;
-                switch (mode)
-                {
-                    case LoopPolicy.LoopVideoToAudio:
-                        finalArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -stream_loop -1 -i \"{joinedPath}\" -i \"{job.AudioPath}\" -shortest -map 0:v -map 1:a -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-                    case LoopPolicy.LoopAudioToVideo:
-                        finalArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{joinedPath}\" -stream_loop -1 -i \"{job.AudioPath}\" -shortest -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-                    default:
-                        finalArgs = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{joinedPath}\" -i \"{job.AudioPath}\" -shortest -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-                }
-                await RunFfmpegAsync(finalArgs, ct);
-            }
-            else
-            {
-                try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
-                File.Move(joinedPath, outputPath);
-            }
-
-            TryDeleteFolder(job.SessionFolder);
-        }
-
-        private async Task CombineVideosAsync(WorkItem job, CancellationToken ct)
-        {
-            // 0) Make a session folder if none was provided
-            string session = string.IsNullOrWhiteSpace(job.SessionFolder)
-                ? Path.Combine(AppConfig.TempRoot, $"comb_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}")
-                : job.SessionFolder;
-            Directory.CreateDirectory(session);
-
-            // 1) Normalize EACH input first (re-encode to match res/FPS; strip audio so streams match)
-            var normalized = new List<string>();
-            int idx = 0;
-            foreach (var v in job.Inputs)
-            {
-                string outVid = Path.Combine(session, $"_norm_{idx++:000}.mp4");
-                string normArgs =
-                    $"-y -nostdin -hide_banner -loglevel error -nostats " +
-                    $"-i \"{v}\" " +
-                    $"-vf scale=1920:1080:force_original_aspect_ratio=decrease," +
-                    $"pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps={AppConfig.Fps} " +
-                    $"-c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -vsync cfr -an " +
-                    $"-max_muxing_queue_size 2048 \"{outVid}\"";
-                await RunFfmpegAsync(normArgs, ct);
-                normalized.Add(outVid);
-            }
-
-            // 2) Concat the normalized clips (fast, no re-encode, and no audio track)
-            string listPath = Path.Combine(session, "_concat.txt");
-            File.WriteAllLines(listPath, normalized.Select(p => $"file '{p.Replace("'", "'\\''")}'"));
-
-            string joinedPath = Path.Combine(session, "_joined.mp4");
-            string concatArgs =
-                $"-y -nostdin -hide_banner -loglevel error -nostats " +
-                $"-f concat -safe 0 -i \"{listPath}\" -c copy -an \"{joinedPath}\"";
-            await RunFfmpegAsync(concatArgs, ct);
-
-            // 3) Finalize: either attach music (with your chosen loop policy) or just save the joined video
-            string outputPath = Path.Combine(job.OutputFolder, $"{Sanitize(job.Title)}_{DateTime.Now:yyyyMMddHHmmss}.mp4");
-            if (!string.IsNullOrWhiteSpace(job.AudioPath))
-            {
-                var mode = job.LoopMode ?? AppConfig.DefaultLoopPolicy;
-                string finalArgs;
-                switch (mode)
-                {
-                    case LoopPolicy.LoopVideoToAudio:
-                        // repeat video to match audio → must re-encode video
-                        finalArgs =
-                            $"-y -nostdin -hide_banner -loglevel error -nostats " +
-                            $"-stream_loop -1 -i \"{joinedPath}\" -i \"{job.AudioPath}\" -shortest " +
-                            $"-map 0:v -map 1:a -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p " +
-                            $"-c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                        break;
-
-                    case LoopPolicy.LoopAudioToVideo:
-                        // repeat audio to match video → keep video, encode audio only
-                        finalArgs =
-                            $"-y -nostdin -hide_banner -loglevel error -nostats " +
-                            $"-i \"{joinedPath}\" -stream_loop -1 -i \"{job.AudioPath}\" -shortest " +
-                            $"-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -ar 48000 " +
-                            $"-movflags +faststart \"{outputPath}\"";
-                        break;
-
-                    default: // Shortest
-                        finalArgs =
-                            $"-y -nostdin -hide_banner -loglevel error -nostats " +
-                            $"-i \"{joinedPath}\" -i \"{job.AudioPath}\" -shortest " +
-                            $"-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -ar 48000 " +
-                            $"-movflags +faststart \"{outputPath}\"";
-                        break;
-                }
-                await RunFfmpegAsync(finalArgs, ct);
-            }
-            else
-            {
-                try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
-                File.Move(joinedPath, outputPath);
-            }
-
-            // 4) Cleanup
-            TryDeleteFile(listPath);
-            TryDeleteFolder(session);
-        }
-
-
-        private async Task AddAudioToVideoAsync(WorkItem job, CancellationToken ct)
-        {
-            string video = job.Inputs[0];
-            string audio = job.AudioPath!;
-            var mode = job.LoopMode ?? AppConfig.DefaultLoopPolicy;
-            string outputPath = Path.Combine(job.OutputFolder, $"{Sanitize(Path.GetFileNameWithoutExtension(video))}_withAudio.mp4");
-
-            string args;
-            switch (mode)
-            {
-                case LoopPolicy.LoopVideoToAudio:
-                    // repeat video to match audio length
-                    args = $"-y -nostdin -hide_banner -loglevel error -nostats -stream_loop -1 -i \"{video}\" -i \"{audio}\" -shortest -map 0:v -map 1:a -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                    break;
-                case LoopPolicy.LoopAudioToVideo:
-                    // repeat audio to match video length
-                    args = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{video}\" -stream_loop -1 -i \"{audio}\" -shortest -map 0:v -map 1:a -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                    break;
-                default:
-                    // shortest
-                    args = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{video}\" -i \"{audio}\" -shortest -map 0:v -map 1:a -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -movflags +faststart \"{outputPath}\"";
-                    break;
-            }
-
-            await RunFfmpegAsync(args, ct);
-        }
-
-        private async Task TranscodeSingleVideoAsync(WorkItem job, CancellationToken ct)
-        {
-            string video = job.Inputs[0];
-            string outputPath = Path.Combine(job.OutputFolder, $"{Sanitize(Path.GetFileNameWithoutExtension(video))}.mp4");
-            string args = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{video}\" -c:v {AppConfig.OutputCodec} -pix_fmt yuv420p -movflags +faststart \"{outputPath}\"";
-            await RunFfmpegAsync(args, ct);
-        }
-
-        // ======== IMAGE PROCESSING ========
-        private string ProcessImage(string inputFilePath, int imageIndex, string sessionFolder)
-        {
-            string outputImagePath = Path.Combine(sessionFolder, $"TEMP{imageIndex:D4}.jpg");
-            Directory.CreateDirectory(sessionFolder);
-
-            string filter = "[0:v]scale='if(gte(a,16/9),1800,-1)':'if(gte(a,16/9),-1,1012.50)'[fg];" +
-                            "[0:v]scale=1920:1080,format=yuva420p,gblur=sigma=60[bg];" +
-                            "[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuva420p";
-
-            string args = $"-y -nostdin -hide_banner -loglevel error -nostats -i \"{inputFilePath}\" -filter_complex \"{filter}\" -q:v 1 -frames:v 1 \"{outputImagePath}\"";
-            RunFfmpeg(args); // sync is fine per image
-            return outputImagePath;
         }
 
         // ======== HELPERS ========
@@ -981,7 +587,7 @@ namespace BKE_MediaTools
 
         private static LoopPolicy GetLoopPolicy()
         {
-            if (!AppConfig.PromptForLoopPolicy) return AppConfig.DefaultLoopPolicy;
+            if (!RenderEngine.PromptForLoopPolicy) return RenderEngine.DefaultLoopPolicy;
             return AskLoopPolicy();
         }
 
@@ -995,117 +601,6 @@ namespace BKE_MediaTools
             return dr == DialogResult.Yes ? LoopPolicy.LoopVideoToAudio :
                    dr == DialogResult.No ? LoopPolicy.LoopAudioToVideo :
                    LoopPolicy.Shortest;
-        }
-
-        private static bool IsImageFile(string p)
-        {
-            string[] exts = { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".webp", ".jfif" };
-            return exts.Contains(Path.GetExtension(p).ToLowerInvariant());
-        }
-        private static bool IsVideoFile(string p)
-        {
-            string[] exts = { ".mp4", ".mov", ".mkv", ".avi", ".m4v" };
-            return exts.Contains(Path.GetExtension(p).ToLowerInvariant());
-        }
-        private static bool IsAudioFile(string p)
-        {
-            string[] exts = { ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg" };
-            return exts.Contains(Path.GetExtension(p).ToLowerInvariant());
-        }
-
-        private static string? ChooseBestAudio(IEnumerable<string> audios)
-        {
-            if (audios == null) return null;
-            var pick = audios
-                .Where(a => !string.IsNullOrWhiteSpace(a) && File.Exists(a))
-                .OrderByDescending(a => new FileInfo(a).Length)
-                .FirstOrDefault();
-            return string.IsNullOrWhiteSpace(pick) ? null : pick;
-        }
-
-        private static string EnsureDatedOutput()
-        {
-            string dated = Path.Combine(AppConfig.OutputRoot, DateTime.Now.ToString("MM-dd-yyyy"));
-            Directory.CreateDirectory(dated);
-            return dated;
-        }
-
-        private static string Sanitize(string name)
-        {
-            name = Regex.Replace(name, "[\\\\/:*?\"<>|]", "_");
-            return name.Trim();
-        }
-
-        // ======== FFmpeg runners (fixed: drain stderr while running) ========
-        private static void RunFfmpeg(string args)
-        {
-            using var p = new Process();
-            p.StartInfo.FileName = AppConfig.FFmpegPath;
-            p.StartInfo.Arguments = args;
-            p.StartInfo.UseShellExecute = false;
-            p.StartInfo.RedirectStandardError = true;
-            p.StartInfo.RedirectStandardOutput = false;
-            p.StartInfo.CreateNoWindow = true;
-            p.StartInfo.StandardErrorEncoding = Encoding.UTF8;
-
-            var sb = new StringBuilder();
-            p.ErrorDataReceived += (_, e) => { if (e.Data != null) sb.AppendLine(e.Data); };
-
-            if (!p.Start()) throw new InvalidOperationException("Failed to start FFmpeg process.");
-
-            p.BeginErrorReadLine();              // drain stderr to avoid deadlock
-            p.WaitForExit();                     // sync wait is fine here
-            p.CancelErrorRead();
-
-            if (p.ExitCode != 0)
-                throw new InvalidOperationException($"FFmpeg failed. Args: {args}\n{sb}");
-        }
-
-        private static async Task RunFfmpegAsync(string args, CancellationToken ct)
-        {
-            using var p = new Process();
-            p.StartInfo.FileName = AppConfig.FFmpegPath;
-            p.StartInfo.Arguments = args;
-            p.StartInfo.UseShellExecute = false;
-            p.StartInfo.RedirectStandardError = true;
-            p.StartInfo.RedirectStandardOutput = false;
-            p.StartInfo.CreateNoWindow = true;
-            p.StartInfo.StandardErrorEncoding = Encoding.UTF8;
-            p.EnableRaisingEvents = true;
-
-            var sb = new StringBuilder();
-            p.ErrorDataReceived += (_, e) => { if (e.Data != null) sb.AppendLine(e.Data); };
-
-            var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-            p.Exited += (_, __) => tcs.TrySetResult(p.ExitCode);
-
-            if (!p.Start()) throw new InvalidOperationException("Failed to start FFmpeg");
-
-            p.BeginErrorReadLine(); // start draining BEFORE waiting
-
-            using (ct.Register(() => { try { if (!p.HasExited) p.Kill(); } catch { } tcs.TrySetCanceled(ct); }))
-            {
-#if NET6_0_OR_GREATER
-                try { await p.WaitForExitAsync(ct); }
-                catch (OperationCanceledException) { /* ignore: already handled by Kill */ }
-#else
-                await Task.Run(() => p.WaitForExit(), ct);
-#endif
-                int code = p.HasExited ? p.ExitCode : await tcs.Task;
-                p.CancelErrorRead();
-
-                if (code != 0)
-                    throw new InvalidOperationException($"FFmpeg failed. Args: {args}\n{sb}");
-            }
-        }
-
-        private static void TryDeleteFile(string path)
-        {
-            try { if (File.Exists(path)) File.Delete(path); } catch { }
-        }
-        private static void TryDeleteFolder(string path)
-        {
-            try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { }
         }
 
         private static string Prompt(string text, string caption)
@@ -1123,8 +618,8 @@ namespace BKE_MediaTools
             // Ctrl+DoubleClick opens TEMP instead
             if ((ModifierKeys & Keys.Control) == Keys.Control)
             {
-                Directory.CreateDirectory(AppConfig.OutputRoot);
-                Process.Start("explorer.exe", AppConfig.OutputRoot);
+                Directory.CreateDirectory(RenderEngine.OutputRoot);
+                Process.Start("explorer.exe", RenderEngine.OutputRoot);
                 return;
             }
 
