@@ -1120,14 +1120,24 @@ namespace BKE_MediaTools
 
         private void BKE_RenderDock_MouseDoubleClick(object sender, MouseEventArgs e)
         {
-            // Ctrl+DoubleClick opens TEMP instead
+            // Ctrl+DoubleClick opens TEMP instead.
             if ((ModifierKeys & Keys.Control) == Keys.Control)
             {
-                Directory.CreateDirectory(AppConfig.OutputRoot);
-                Process.Start("explorer.exe", AppConfig.OutputRoot);
+                Directory.CreateDirectory(AppConfig.TempRoot);
+                Process.Start("explorer.exe", AppConfig.TempRoot);
                 return;
             }
 
+            // Normal double-click opens the most recently written dated output folder.
+            Directory.CreateDirectory(AppConfig.OutputRoot);
+            var latestOutput = Directory
+                .EnumerateDirectories(AppConfig.OutputRoot)
+                .OrderByDescending(Directory.GetLastWriteTime)
+                .FirstOrDefault();
+
+            Process.Start(
+                "explorer.exe",
+                latestOutput ?? AppConfig.OutputRoot);
         }
     }
 }
