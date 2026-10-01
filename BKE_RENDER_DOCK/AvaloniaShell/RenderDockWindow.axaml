@@ -1,38 +1,57 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="BKE_MediaTools.AvaloniaShell.RenderDockWindow"
-        Width="449"
-        Height="450"
-        MinWidth="449"
-        MinHeight="450"
-        MaxWidth="449"
-        MaxHeight="450"
+        Width="520"
+        Height="520"
+        MinWidth="520"
+        MinHeight="520"
         Title="Render Dock"
         WindowStartupLocation="CenterScreen">
-  <Border Padding="24">
-    <Grid RowDefinitions="Auto,*">
-      <TextBlock Text="Render Dock"
-                 FontSize="24"
-                 FontWeight="SemiBold"
-                 HorizontalAlignment="Center" />
-      <Border Grid.Row="1"
-              Margin="0,24,0,0"
-              BorderThickness="2"
-              BorderBrush="{DynamicResource ThemeForegroundLowBrush}"
-              CornerRadius="12"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-        <StackPanel VerticalAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Spacing="8">
-          <TextBlock Text="Drop files here"
-                     FontSize="20"
-                     HorizontalAlignment="Center" />
-          <TextBlock Text="Avalonia shell — rendering engine remains unchanged"
-                     Opacity="0.65"
-                     HorizontalAlignment="Center" />
-        </StackPanel>
-      </Border>
+  <Grid RowDefinitions="Auto,*,Auto" Margin="22">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="2">
+        <TextBlock Text="Render Dock"
+                   FontSize="24"
+                   FontWeight="SemiBold" />
+        <TextBlock Text="Drop images, video, audio, or project folders"
+                   Opacity="0.68" />
+      </StackPanel>
+      <Button Grid.Column="1"
+              Content="Open output"
+              Padding="14,8"
+              VerticalAlignment="Center"
+              Click="OpenOutput_Click" />
     </Grid>
-  </Border>
+
+    <Border x:Name="DropZone"
+            Grid.Row="1"
+            Margin="0,22,0,18"
+            Padding="26"
+            BorderThickness="2"
+            BorderBrush="#666666"
+            CornerRadius="14"
+            DragDrop.AllowDrop="True">
+      <StackPanel VerticalAlignment="Center"
+                  HorizontalAlignment="Center"
+                  Spacing="10">
+        <TextBlock Text="Drop files here"
+                   FontSize="22"
+                   FontWeight="SemiBold"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="Jobs are queued and rendered with the existing Render Engine."
+                   Opacity="0.68"
+                   TextAlignment="Center"
+                   MaxWidth="360" />
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2"
+            Padding="12"
+            CornerRadius="8"
+            Background="#181818">
+      <TextBlock x:Name="StatusText"
+                 Text="Ready"
+                 TextWrapping="Wrap" />
+    </Border>
+  </Grid>
 </Window>

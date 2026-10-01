@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace BKE_MediaTools
 {
@@ -14,17 +15,17 @@ namespace BKE_MediaTools
 
     internal interface IRenderDockInteraction
     {
-        string? Prompt(string text, string caption);
-        string? PromptForAudioFile();
-        LoopPolicy GetLoopPolicy();
-        DetectedAudioChoice ChooseDetectedAudio(IReadOnlyList<string> audios, string? bestAudio);
-        bool OfferAudioFile();
-        void ShowMessage(string text, string caption);
+        Task<string?> PromptAsync(string text, string caption);
+        Task<string?> PromptForAudioFileAsync();
+        Task<LoopPolicy> GetLoopPolicyAsync();
+        Task<DetectedAudioChoice> ChooseDetectedAudioAsync(IReadOnlyList<string> audios, string? bestAudio);
+        Task<bool> OfferAudioFileAsync();
+        Task ShowMessageAsync(string text, string caption);
     }
 
     internal static class RenderJobPlanner
     {
-        public static IReadOnlyList<RenderJob> Plan(IEnumerable<string> droppedPaths, IRenderDockInteraction interaction)
+        public static async Task<IReadOnlyList<RenderJob>> PlanAsync(IEnumerable<string> droppedPaths, IRenderDockInteraction interaction)
         {
             var jobs = new List<RenderJob>();
             var images = new List<string>();
@@ -35,7 +36,7 @@ namespace BKE_MediaTools
             {
                 if (Directory.Exists(path))
                 {
-                    PlanDirectory(path, jobs, interaction);
+                    await PlanDirectoryAsync(path, jobs, interaction);
                 }
                 else if (File.Exists(path))
                 {
@@ -45,11 +46,11 @@ namespace BKE_MediaTools
                 }
             }
 
-            PlanLooseFiles(images, videos, audios, jobs, interaction);
+            await PlanLooseFilesAsync(images, videos, audios, jobs, interaction);
             return jobs;
         }
 
-        private static void PlanDirectory(
+        private static async Task PlanDirectoryAsync(
             string path,
             List<RenderJob> jobs,
             IRenderDockInteraction interaction)
@@ -70,7 +71,7 @@ namespace BKE_MediaTools
             if (imgs.Count == 0 && vids.Count == 0)
             {
                 if (auds.Any())
-                    interaction.ShowMessage(
+                    await interaction.ShowMessageAsync(
                         $"“{folderName}” has only audio. Nothing to render.",
                         "Heads up");
                 return;
@@ -89,7 +90,7 @@ namespace BKE_MediaTools
                     processed,
                     RenderEngine.ChooseBestAudio(auds),
                     vids,
-                    auds.Any() ? interaction.GetLoopPolicy() : null));
+                    auds.Any() ? await interaction.GetLoopPolicyAsync() : null));
                 return;
             }
 
@@ -104,7 +105,7 @@ namespace BKE_MediaTools
                     processed,
                     auds.FirstOrDefault(),
                     null,
-                    auds.Any() ? interaction.GetLoopPolicy() : null));
+                    auds.Any() ? await interaction.GetLoopPolicyAsync() : null));
                 return;
             }
 
@@ -119,7 +120,7 @@ namespace BKE_MediaTools
                     vids,
                     audioPath,
                     null,
-                    audioPath != null ? interaction.GetLoopPolicy() : null));
+                    audioPath != null ? await interaction.GetLoopPolicyAsync() : null));
                 return;
             }
 
@@ -139,7 +140,7 @@ namespace BKE_MediaTools
                         new List<string> { vids[0] },
                         audioPath,
                         null,
-                        interaction.GetLoopPolicy()));
+                        await interaction.GetLoopPolicyAsync()));
                 }
                 else
                 {
@@ -153,7 +154,7 @@ namespace BKE_MediaTools
             }
         }
 
-        private static void PlanLooseFiles(
+        private static async Task PlanLooseFilesAsync(
             List<string> images,
             List<string> videos,
             List<string> audios,
@@ -175,7 +176,7 @@ namespace BKE_MediaTools
 
             if (images.Count > 0 && videos.Count > 0)
             {
-                string? title = interaction.Prompt(
+                string? title = await interaction.PromptAsync(
                     "Enter the project title:",
                     "BKE MIX");
 
@@ -193,23 +194,23 @@ namespace BKE_MediaTools
                     if (audios.Any())
                     {
                         var best = RenderEngine.ChooseBestAudio(audios);
-                        var choice = interaction.ChooseDetectedAudio(audios, best);
+                        var choice = await interaction.ChooseDetectedAudioAsync(audios, best);
 
                         if (choice == DetectedAudioChoice.UseBest)
                             audioPath = best;
                         else if (choice == DetectedAudioChoice.Browse)
-                            audioPath = interaction.PromptForAudioFile();
+                            audioPath = await interaction.PromptForAudioFileAsync();
                         else
                             return;
                     }
                     else if (RenderEngine.AlwaysPromptForAudioOnMixed &&
-                             interaction.OfferAudioFile())
+                             await interaction.OfferAudioFileAsync())
                     {
-                        audioPath = interaction.PromptForAudioFile();
+                        audioPath = await interaction.PromptForAudioFileAsync();
                     }
 
                     var policy = audioPath != null
-                        ? interaction.GetLoopPolicy()
+                        ? await interaction.GetLoopPolicyAsync()
                         : (LoopPolicy?)null;
 
                     jobs.Add(new RenderJob(
@@ -228,7 +229,7 @@ namespace BKE_MediaTools
 
             if (images.Count == 1 && videos.Count == 0)
             {
-                string? title = interaction.Prompt(
+                string? title = await interaction.PromptAsync(
                     "Enter the image name:",
                     "BKE Image");
 
@@ -253,7 +254,7 @@ namespace BKE_MediaTools
 
             if (images.Count >= 2 && videos.Count == 0)
             {
-                string? title = interaction.Prompt(
+                string? title = await interaction.PromptAsync(
                     "Enter the slideshow title:",
                     "BKE SLIDESHOW");
 
@@ -271,7 +272,7 @@ namespace BKE_MediaTools
                     if (audioPath == null &&
                         RenderEngine.AlwaysPromptForAudioOnSlideshow)
                     {
-                        audioPath = interaction.PromptForAudioFile();
+                        audioPath = await interaction.PromptForAudioFileAsync();
                     }
 
                     jobs.Add(new RenderJob(
@@ -283,7 +284,7 @@ namespace BKE_MediaTools
                         audioPath,
                         null,
                         audioPath != null
-                            ? interaction.GetLoopPolicy()
+                            ? await interaction.GetLoopPolicyAsync()
                             : null));
                 }
 
@@ -292,7 +293,7 @@ namespace BKE_MediaTools
 
             if (videos.Count >= 2 && images.Count == 0)
             {
-                string outputName = interaction.Prompt(
+                string outputName = await interaction.PromptAsync(
                     "Enter the combined video title:",
                     "CombinedVideo") ?? "CombinedVideo";
 
@@ -300,7 +301,7 @@ namespace BKE_MediaTools
                 if (audioPath == null &&
                     RenderEngine.AlwaysPromptForAudioOnCombineVideos)
                 {
-                    audioPath = interaction.PromptForAudioFile();
+                    audioPath = await interaction.PromptForAudioFileAsync();
                 }
 
                 jobs.Add(new RenderJob(
@@ -312,7 +313,7 @@ namespace BKE_MediaTools
                     audioPath,
                     null,
                     audioPath != null
-                        ? interaction.GetLoopPolicy()
+                        ? await interaction.GetLoopPolicyAsync()
                         : null));
                 return;
             }
@@ -323,7 +324,7 @@ namespace BKE_MediaTools
                 if (audioPath == null &&
                     RenderEngine.AlwaysPromptForAudioOnSingleVideo)
                 {
-                    audioPath = interaction.PromptForAudioFile();
+                    audioPath = await interaction.PromptForAudioFileAsync();
                 }
 
                 if (!string.IsNullOrEmpty(audioPath))
@@ -336,7 +337,7 @@ namespace BKE_MediaTools
                         new List<string> { videos[0] },
                         audioPath,
                         null,
-                        interaction.GetLoopPolicy()));
+                        await interaction.GetLoopPolicyAsync()));
                 }
                 else
                 {
@@ -353,7 +354,7 @@ namespace BKE_MediaTools
 
             if (audios.Any())
             {
-                interaction.ShowMessage(
+                await interaction.ShowMessageAsync(
                     "Only audio files were dropped. Nothing to render.",
                     "Heads up");
             }

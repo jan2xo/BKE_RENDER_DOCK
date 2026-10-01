@@ -257,13 +257,13 @@ namespace BKE_MediaTools
         }
 
 
-        private void Form_DragDrop(object? sender, DragEventArgs e)
+        private async void Form_DragDrop(object? sender, DragEventArgs e)
         {
             try
             {
                 string[] dropped = (string[])e.Data!.GetData(DataFormats.FileDrop)!;
 
-                foreach (var job in RenderJobPlanner.Plan(dropped, this))
+                foreach (var job in await RenderJobPlanner.PlanAsync(dropped, this))
                     _queue.Enqueue(job);
             }
             catch (Exception ex)
@@ -312,7 +312,7 @@ namespace BKE_MediaTools
             });
         }
 
-        DetectedAudioChoice IRenderDockInteraction.ChooseDetectedAudio(IReadOnlyList<string> audios, string? bestAudio)
+        Task<DetectedAudioChoice> IRenderDockInteraction.ChooseDetectedAudioAsync(IReadOnlyList<string> audios, string? bestAudio)
         {
             var dlg = MessageBox.Show(
                 $"Found {audios.Count} audio file(s).\nUse best match?\n→ {Path.GetFileName(bestAudio)}",
@@ -320,40 +320,46 @@ namespace BKE_MediaTools
                 MessageBoxButtons.YesNoCancel,
                 MessageBoxIcon.Question);
 
-            return dlg == DialogResult.Yes
-                ? DetectedAudioChoice.UseBest
-                : dlg == DialogResult.No
-                    ? DetectedAudioChoice.Browse
-                    : DetectedAudioChoice.Cancel;
+            return Task.FromResult(
+                dlg == DialogResult.Yes
+                    ? DetectedAudioChoice.UseBest
+                    : dlg == DialogResult.No
+                        ? DetectedAudioChoice.Browse
+                        : DetectedAudioChoice.Cancel);
         }
 
-        public bool OfferAudioFile()
+        public Task<bool> OfferAudioFileAsync()
         {
-            return MessageBox.Show(
-                "No audio detected. Browse one?",
-                "Add audio?",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question) == DialogResult.Yes;
+            return Task.FromResult(
+                MessageBox.Show(
+                    "No audio detected. Browse one?",
+                    "Add audio?",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) == DialogResult.Yes);
         }
 
-        public void ShowMessage(string text, string caption)
+        public Task ShowMessageAsync(string text, string caption)
         {
             MessageBox.Show(text, caption);
+            return Task.CompletedTask;
         }
 
-        public string? PromptForAudioFile()
+        public Task<string?> PromptForAudioFileAsync()
         {
             using var ofd = new OpenFileDialog();
             ofd.Title = "Select audio file (optional)";
             ofd.Filter = "Audio Files|*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg|All Files|*.*";
             ofd.Multiselect = false;
-            return ofd.ShowDialog() == DialogResult.OK ? ofd.FileName : null;
+            return Task.FromResult<string?>(
+                ofd.ShowDialog() == DialogResult.OK ? ofd.FileName : null);
         }
 
-        LoopPolicy IRenderDockInteraction.GetLoopPolicy()
+        Task<LoopPolicy> IRenderDockInteraction.GetLoopPolicyAsync()
         {
-            if (!RenderEngine.PromptForLoopPolicy) return RenderEngine.DefaultLoopPolicy;
-            return AskLoopPolicy();
+            return Task.FromResult(
+                RenderEngine.PromptForLoopPolicy
+                    ? AskLoopPolicy()
+                    : RenderEngine.DefaultLoopPolicy);
         }
 
         private static LoopPolicy AskLoopPolicy()
@@ -368,9 +374,10 @@ namespace BKE_MediaTools
                    LoopPolicy.Shortest;
         }
 
-        public string? Prompt(string text, string caption)
+        public Task<string?> PromptAsync(string text, string caption)
         {
-            return Microsoft.VisualBasic.Interaction.InputBox(text, caption, "");
+            return Task.FromResult<string?>(
+                Microsoft.VisualBasic.Interaction.InputBox(text, caption, ""));
         }
 
         private void BKE_RenderDock_Load(object sender, EventArgs e)
