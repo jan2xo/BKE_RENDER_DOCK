@@ -338,6 +338,7 @@ namespace BKE_MediaTools
         public BKE_RenderDock()
         {
             InitializeComponent();
+            InitializeCompactUi(); // compact dock presentation (UI only)
             AllowDrop = true;
             DragEnter += Form_DragEnter;
             DragDrop += Form_DragDrop;
@@ -659,6 +660,7 @@ namespace BKE_MediaTools
             }
             finally
             {
+                CompactUi_SyncQueuedJobs(); // UI only: show newly queued jobs
                 EnsureRunner(); // ALWAYS attempt to start the runner
             }
         }
@@ -669,6 +671,7 @@ namespace BKE_MediaTools
             while (_queue.TryDequeue(out var job))
             {
                 ct.ThrowIfCancellationRequested();
+                var compactStartedUtc = CompactUi_JobStarted(job); // UI only
                 try
                 {
                     Notify("BKE RenderDock", $"Starting: {job.Title} ({job.Type})");
@@ -695,9 +698,11 @@ namespace BKE_MediaTools
                             break;
                     }
                     Notify("BKE RenderDock", $"Done: {job.Title}");
+                    CompactUi_JobCompleted(job, compactStartedUtc); // UI only
                 }
                 catch (Exception ex)
                 {
+                    CompactUi_JobFailed(job, ex); // UI only
                     Notify("BKE RenderDock (Error)", $"{job.Title}: {ex.Message}", 5000);
                     MessageBox.Show($"Job failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
