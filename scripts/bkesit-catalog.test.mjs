@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeRelease, versionFromTag, SOURCE_REPOSITORY, CATALOG_REPOSITORY,
-  IMAGE_TARGET_NAME,
+  IMAGE_TARGET_NAME, assertExactSourceSha,
 } from "./bkesit-catalog.mjs";
 
 const SHA = "a".repeat(40);
@@ -62,4 +62,11 @@ test("reject absent GitHub digest and non-commit tag", () => {
   assert.throws(() => normalizeRelease(a));
   const b = fixture(); b.reference.type = "tree";
   assert.throws(() => normalizeRelease(b));
+});
+
+test("an explicit publish handoff requires matching exact source SHA", () => {
+  assert.doesNotThrow(() => assertExactSourceSha(SHA, SHA));
+  assert.throws(() => assertExactSourceSha(SHA, "b".repeat(40)), /exact current source/);
+  assert.throws(() => assertExactSourceSha(SHA, "main"), /exact current source/);
+  assert.throws(() => assertExactSourceSha(SHA, ""), /exact current source/);
 });
