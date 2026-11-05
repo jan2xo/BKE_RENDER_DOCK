@@ -17,8 +17,8 @@ on:
         required: true
         type: string
       source_sha:
-        description: "Exact 40-character source commit SHA of the release tag"
-        required: true
+        description: "Optional exact source commit SHA (auto-resolved from tag if blank)"
+        required: false
         type: string
       publish:
         description: "Publish verified files to BKESIT (false = verify-only)"
@@ -42,6 +42,8 @@ jobs:
     name: Test and check exact stable source release
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.release.outputs.source_sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -62,7 +64,8 @@ jobs:
             echo "BKESIT publishing is restricted to Render Dock main." >&2
             exit 1
           }
-      - name: Verify existing stable release, product manifest and exact requested source SHA
+      - name: Verify existing stable release, product manifest and pin exact resolved source SHA
+        id: release
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -73,15 +76,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "An exact lowercase 40-character source SHA is required." >&2
+          if [[ -n "$SOURCE_SHA" && ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Optional source SHA must be a 40-character lowercase commit SHA." >&2
             exit 1
-          }
+          fi
           if [[ "$PUBLISH" == "true" && "$ACKNOWLEDGEMENT" != "PUBLISH_RENDER_DOCK_TO_BKESIT" ]]; then
             echo "An explicit Render Dock publication acknowledgement is required." >&2
             exit 1
           fi
-          node scripts/bkesit-catalog.mjs --tag "$RELEASE_TAG" --source-sha "$SOURCE_SHA"
+          if [[ -n "$SOURCE_SHA" ]]; then
+            node scripts/bkesit-catalog.mjs --tag "$RELEASE_TAG" --source-sha "$SOURCE_SHA"
+          else
+            node scripts/bkesit-catalog.mjs --tag "$RELEASE_TAG"
+          fi
+          exact_sha="$(node -e 'const e=require("./dist/bkesit/catalog-entry.json"); console.log(e.source.sha)')"
+          [[ "$exact_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          echo "source_sha=$exact_sha" >> "$GITHUB_OUTPUT"
       - name: Preserve verified source candidate without publishing anything
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
@@ -115,7 +125,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.catalog-app.outputs.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_SHA: ${{ needs.verify.outputs.source_sha }}
           PUBLISH: ${{ inputs.publish }}
           ACKNOWLEDGEMENT: ${{ inputs.acknowledgement }}
         run: |
