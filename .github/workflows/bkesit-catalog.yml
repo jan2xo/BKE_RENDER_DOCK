@@ -1,0 +1,54 @@
+name: BKESIT catalog candidate (Render Dock)
+
+on:
+  pull_request:
+    paths:
+      - "scripts/bkesit-catalog.mjs"
+      - "scripts/bkesit-catalog.test.mjs"
+      - ".github/workflows/bkesit-catalog.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing published Render Dock stable release tag (vX.Y.Z)"
+        required: true
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: Verify source release and prepare catalog candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event_name != 'release' || (github.event.release.draft == false && github.event.release.prerelease == false) }}
+    steps:
+      - name: Checkout trusted source instructions
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check contract regression tests
+        run: node --test scripts/bkesit-catalog.test.mjs
+      - name: Verify exact stable release and produce candidate JSON
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/bkesit-catalog.mjs --tag "$RELEASE_TAG"
+      - name: Attach catalog candidate to workflow run (not public distribution)
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bkesit-render-dock-catalog-candidate
+          path: dist/bkesit/catalog-entry.json
+          if-no-files-found: error
+          retention-days: 14
