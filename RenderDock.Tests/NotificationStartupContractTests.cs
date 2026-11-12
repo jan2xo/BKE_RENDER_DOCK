@@ -17,7 +17,7 @@ public sealed class NotificationStartupContractTests
         var preflight = program.IndexOf(
             "NotificationCoordinator.ShowBeforeLicensing(enterpriseSession)",
             StringComparison.Ordinal);
-        var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
+        var fallback = program.IndexOf("if (!enterpriseSession && !strictAgentGateGranted)", StringComparison.Ordinal);
         var authorize = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
 
         Assert.True(preflight >= 0, "Notification preflight is not composed.");
