@@ -36,7 +36,7 @@ try {
         throw "BKE SDK checkout mismatch. Expected $SdkCommit but resolved $resolved."
     }
 
-    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.2.nupkg') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.2.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Notifications.0.5.0.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg') -Force -ErrorAction SilentlyContinue
