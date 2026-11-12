@@ -279,7 +279,7 @@ public sealed class PackageContractTests
         var ledger = File.ReadAllText(Path.Combine(RepositoryRoot,
             "scripts", "certification", "verify-installed-agent-startup-grant.py"));
         Assert.Contains("ApprovedDisposableMachine", source);
-        Assert.Contains("ExactExecutableSha256", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ExpectedExecutableSha256", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("NONSHIPPABLE", source);
         Assert.Contains("--started-ticks", source);
         Assert.Contains("--sid", source);
