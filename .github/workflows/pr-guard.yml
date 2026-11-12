@@ -47,7 +47,10 @@ jobs:
             "github.event.comment.body == '/certify renderdock windows-x64'",
             "author_association", "source_sha", "pr.head.sha",
             "ref: ${{ needs.plan.outputs.source_sha }}",
-            "Required certification", "if: always() && needs.plan.result == 'success'"
+            "Required certification", "if: always() && needs.plan.result == 'success'",
+            "e34431f5400aab00e87549b8aae8dedc3104f4bb",
+            "2.0.2", "CertifyStartupGateClient",
+            "NONSHIPPABLE Agent-first", "process.ExitCode -ne 84"
           ]) {
             if (!yaml.includes(invariant)) throw new Error("Missing CI trust invariant: " + invariant);
           }
