@@ -1,22 +1,90 @@
 name: Render Dock Windows x64 certification
 
 on:
-  pull_request:
-  push:
-    branches: [ main ]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current Render Dock PR head SHA
+        required: true
+        type: string
+      pr_number:
+        description: Current open Render Dock PR number
+        required: true
+        type: number
 
 permissions:
   contents: read
 
 jobs:
+  plan:
+    name: Resolve intentionally requested exact PR head
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request &&
+       github.event.comment.body == '/certify renderdock windows-x64')
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.intent.outputs.source_sha }}
+      pr_number: ${{ steps.intent.outputs.pr_number }}
+    steps:
+      - name: Resolve current PR head and authorization
+        id: intent
+        uses: actions/github-script@v7
+        env:
+          DISPATCH_SHA: ${{ inputs.source_sha }}
+          DISPATCH_PR: ${{ inputs.pr_number }}
+        with:
+          script: |
+            const isComment = context.eventName === "issue_comment";
+            if (isComment && !new Set(["OWNER","MEMBER","COLLABORATOR"])
+                .has(context.payload.comment?.author_association ?? "NONE")) {
+              core.setFailed("Only repository collaborators may request full Windows certification.");
+              return;
+            }
+            const rawPr = isComment ? context.issue.number : Number(process.env.DISPATCH_PR);
+            if (!Number.isSafeInteger(rawPr) || rawPr < 1) {
+              core.setFailed("Exact open PR number is required."); return;
+            }
+            const response = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: rawPr,
+            });
+            const pr = response.data;
+            if (pr.state !== "open" || pr.base.ref !== "main" ||
+                pr.head.repo?.full_name !== context.repo.owner + "/" + context.repo.repo ||
+                !/^[0-9a-f]{40}$/i.test(pr.head.sha)) {
+              core.setFailed("Certification requires an open same-repository main-based PR.");
+              return;
+            }
+            if (!isComment && pr.head.sha !== process.env.DISPATCH_SHA) {
+              core.setFailed("Manual SHA does not equal current PR head.");
+              return;
+            }
+            core.setOutput("source_sha", pr.head.sha);
+            core.setOutput("pr_number", String(rawPr));
+            core.summary.addRaw(
+              "Render Dock certification intent: Windows x64 full product + SDK + installer proof\n" +
+              "Exact PR #" + rawPr + " SHA: " + pr.head.sha).write();
+
   windows-x64:
+    name: Render Dock exact-head Windows x64 source/product/installer proof
+    needs: plan
+    if: needs.plan.result == 'success'
     runs-on: windows-latest
+    env:
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
     steps:
       - name: Check out exact source
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Verify checked-out exact candidate SHA
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:SOURCE_SHA) { throw "Render Dock exact-head checkout mismatch" }
 
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v6
@@ -141,3 +209,22 @@ jobs:
             artifacts/installer/Render-Dock-1.0.3-Windows-x64.update.json
             artifacts/installer/SHA256SUMS
           if-no-files-found: error
+
+  required-certification:
+    name: Required certification
+    if: always() && needs.plan.result == 'success'
+    needs: [plan, windows-x64]
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+      PR_NUMBER: ${{ needs.plan.outputs.pr_number }}
+      WINDOWS_RESULT: ${{ needs.windows-x64.result }}
+    steps:
+      - name: Assert declared exact-head Windows proof
+        shell: bash
+        run: |
+          if [ "$WINDOWS_RESULT" != 'success' ]; then
+            echo "Required Render Dock certification failed for $SOURCE_SHA: windows-x64=$WINDOWS_RESULT"
+            exit 1
+          fi
+          echo "Required certification PASS for $SOURCE_SHA: Render Dock PR #$PR_NUMBER windows-x64"
