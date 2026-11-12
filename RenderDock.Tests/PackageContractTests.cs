@@ -237,8 +237,13 @@ public sealed class PackageContractTests
         Assert.True(gate >= 0 && gate < enterprise && gate < grace &&
             gate < notifications && gate < licensing && gate < ui,
             "Preproduction machine-bound verdict must precede all old startup paths.");
-        Assert.DoesNotContain("NamedPipeClientStream", ProductSources(), StringComparison.Ordinal);
-        Assert.DoesNotContain("bke-licensing-agent-standalone-startup-v1", ProductSources(),
+        // EnterpriseSessionClient already legitimately owns its separate
+        // Air Stack module pipe. The new startup pipe stays inside the SDK.
+        Assert.DoesNotContain("NamedPipeClientStream", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("bke-licensing-agent-standalone-startup-v1", program,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("NamedPipeClientStream", File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "AgentClient.cs")),
             StringComparison.Ordinal);
         Assert.Contains("e34431f5400aab00e87549b8aae8dedc3104f4bb", bootstrap);
         Assert.Contains("CertifyStartupGateClient", bootstrap);
