@@ -61,6 +61,25 @@ public sealed class InstalledAgentAcceptanceHarnessTests
     }
 
     [Fact]
+    public async Task WindowsManualHarnessCannotRunWithoutExplicitDisposableApproval()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var path = Path.Combine(RepoRoot, "scripts", "certification",
+            "invoke-installed-agent-startup-acceptance.ps1");
+        var result = await RunAsync("pwsh", new[] {
+            "-NoProfile", "-NonInteractive", "-File", path,
+            "-ExpectedRenderDockSourceSha", new string('a', 40),
+            "-ExpectedAgentSourceSha", new string('b', 40),
+            "-ExpectedExecutableSha256", new string('c', 64),
+            "-ExpectedCredential", "LICENSE_KEY",
+            "-EvidenceDirectory", Path.GetTempPath()
+        }, TimeSpan.FromSeconds(20));
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Explicit disposable-machine approval",
+            result.Output + result.Error);
+    }
+
+    [Fact]
     public async Task WindowsReadOnlyDurableGrantVerifierRejectsForgedFixtureRows()
     {
         if (!OperatingSystem.IsWindows()) return;
