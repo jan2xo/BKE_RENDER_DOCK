@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if (!$ApprovedDisposableMachine) { throw 'Explicit disposable-machine approval is mandatory.' }
-if (!$IsWindows -or ![Environment]::Is64BitOperatingSystem) { throw 'Windows x64 only.' }
+if (-not $IsWindows -or -not ([Environment]::Is64BitOperatingSystem)) { throw 'Windows x64 only.' }
 foreach ($sha in @($ExpectedRenderDockSourceSha, $ExpectedAgentSourceSha)) {
   if ($sha -cnotmatch '^[a-f0-9]{40}$') { throw 'Must provide immutable source SHAs.' }
 }
@@ -82,7 +82,7 @@ if ($trustedProcesses.Count -lt 1) { throw 'No protected installed Agent runtime
 
 # Inspection alone cannot verify the signature. The actual Agent MUST
 # validate signed DS mode/issuer/target before a grant can be returned.
-$matches = @()
+$matchingPolicies = @()
 foreach ($policy in @(Get-ChildItem -LiteralPath $policiesDir -Filter '*.json' -File)) {
   if ($policy.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
   try {
@@ -92,13 +92,13 @@ foreach ($policy in @(Get-ChildItem -LiteralPath $policiesDir -Filter '*.json' -
         $signed.version -ceq '1.0.3' -and
         $signed.image_sha256 -ceq $actual -and
         [string]::Equals($signed.image_path,$exe,[StringComparison]::OrdinalIgnoreCase)) {
-      $matches += $policy.FullName
+      $matchingPolicies += $policy.FullName
     }
   } catch {
     throw 'Malformed installed DS startup policy; do not rewrite policy during acceptance.'
   }
 }
-if ($matches.Count -ne 1) { throw 'Exactly one matching installed DS signed policy is required.' }
+if ($matchingPolicies.Count -ne 1) { throw 'Exactly one matching installed DS signed policy is required.' }
 if (!(Get-Command py -ErrorAction SilentlyContinue)) {
   throw 'Python 3 Windows launcher is required to read Agent grant SQLite without mutation.'
 }
