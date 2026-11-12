@@ -6,7 +6,7 @@ Render Dock is a Windows media-output product built on reusable BKE capabilities
 
 ```text
 Render Dock
-├── BKE.Desktop.Licensing 2.0.1
+├── BKE.Desktop.Licensing 2.0.2
 │     ↓
 │   BKE Licensing Agent
 │
@@ -23,7 +23,7 @@ Render Dock owns product behavior and UI. It does not define Licensing Agent tra
 
 ## Licensing
 
-Standalone startup uses `BKE.Desktop.Licensing` 2.0.1:
+Standalone startup uses `BKE.Desktop.Licensing` 2.0.2:
 
 ```text
 WHAT I NEED
@@ -42,7 +42,15 @@ WHAT I GET
 
 The SDK owns the standard authorization / Agent-owned activation choreography. Render Dock fails closed when authorization is not granted.
 
-The existing operational grace check remains a separate legacy product integration in this release and is intentionally not redesigned during the updater/.NET 10 migration.
+The existing operational grace check remains a separate legacy product integration in this release and is intentionally **not** retired by this source change. Air Stack enterprise redemption remains unchanged in the normal shipping build. Neither grace HTTP nor enterprise redemption constitutes the new process-bound Agent startup proof.
+
+### Strict Agent-bound startup — PREPRODUCTION ONLY
+
+A separate, **nonshippable** Render Dock certification build sets `BkeStartupGateCertification=true` at compile time. That build asks `BkeStandaloneStartupGateClient` **before** attempting enterprise redemption, the legacy grace endpoint, notifications, commercial key activation, FFmpeg or application UI. The SDK uses the Agent's Windows named pipe `bke.standalone-startup.v1`; it rejects a spoofed local server by checking the OS-observed process, its installed protected runtime path and SYSTEM identity. The product never transmits a PID, product ID, user SID, key, activation mode or executable path as authority.
+
+When the Agent or signed installed policy is absent, invalid, unreachable, or denies, the preproduction executable **exits with code 84** without entering the UI and without falling back to grace or enterprise. Ordinary 1.0.3 packaging has this conditional feature disabled and intentionally retains its existing behavior. **This is source-only/negative acceptance**, not a validated installed-Agent success or production anti-bypass claim. A genuine installed DS signed activation policy, real Agent runtime composition, enterprise-mode policy reconciliation, and signed release/install provenance remain separate certification gates. Do not publish the strict certification variant to customers.
+
+This product consumes the SDK built from exact merged source `e34431f5400aab00e87549b8aae8dedc3104f4bb` (unreleased 2.0.2); the Agent Host process trust contract is pinned to source `1bf1a6f7048918f6a19265f94f687d750bb01931` for this verification. Production is locked.
 
 Air Stack enterprise child-session redemption also remains a separate Agent-authenticated named-pipe capability. When that enterprise session is redeemed, Render Dock does not run standalone licensing or standalone update-notification behavior.
 
@@ -100,7 +108,7 @@ BKE packages are prepared from the exact canonical `bke-sdk` merge pinned by:
 The script checks out the exact SDK commit, verifies the resolved SHA, and packs only the capabilities Render Dock consumes:
 
 ```text
-BKE.Desktop.Licensing 2.0.1
+BKE.Desktop.Licensing 2.0.2
 BKE.Notifications      0.5.0
 BKE.Updater            0.4.0
 ```
