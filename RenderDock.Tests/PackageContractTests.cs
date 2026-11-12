@@ -251,6 +251,46 @@ public sealed class PackageContractTests
     }
 
     [Fact]
+    public void AgentAuthorizedAccountStartCannotBeRejectedByLegacyCommercialOnlyFlow()
+    {
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var project = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "RENDER DOCK.csproj"));
+
+        Assert.Contains("bool strictAgentGateGranted = false;", program);
+        Assert.Contains("strictAgentGateGranted = true;", program);
+        Assert.Contains("if (!enterpriseSession && !strictAgentGateGranted)", program);
+        Assert.Contains("#if BKE_STARTUP_GATE_ACCEPTANCE", program);
+        Assert.Contains("Environment.ExitCode = 0;", program);
+        Assert.Contains("BkeStartupGateAcceptance", project);
+        Assert.Contains(">false</BkeStartupGateAcceptance>", project);
+        Assert.Contains("BKE_STARTUP_GATE_ACCEPTANCE", project);
+        Assert.Contains("RejectShippableStartupAcceptance", project);
+        Assert.Contains("'$(BkeStartupGateCertification)' != 'true'", project);
+
+        var grant = program.IndexOf("strictAgentGateGranted = true;", StringComparison.Ordinal);
+        var fallthrough = program.IndexOf(
+            "if (!enterpriseSession && !strictAgentGateGranted)", StringComparison.Ordinal);
+        Assert.True(grant >= 0 && fallthrough > grant,
+            "Signed Agent-authorized ACCOUNT user must not be forced through a second key-only check.");
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot,
+            "scripts", "certification", "invoke-installed-agent-startup-acceptance.ps1"));
+        var ledger = File.ReadAllText(Path.Combine(RepositoryRoot,
+            "scripts", "certification", "verify-installed-agent-startup-grant.py"));
+        Assert.Contains("ApprovedDisposableMachine", source);
+        Assert.Contains("ExpectedExecutableSha256", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NONSHIPPABLE", source);
+        Assert.Contains("--started-ticks", source);
+        Assert.Contains("--sid", source);
+        Assert.Contains("mode=ro", ledger);
+        Assert.Contains("startup_grants", ledger);
+        Assert.Contains("started_utc_ticks", ledger);
+        Assert.DoesNotContain("UPDATE startup_grants", ledger, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM startup_grants", ledger, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ShippingLegacyGraceAndEnterpriseBehaviorAreNotSilentlyRemoved()
     {
         var program = File.ReadAllText(Path.Combine(
@@ -259,7 +299,7 @@ public sealed class PackageContractTests
         Assert.Contains("TryRedeemAsync", program);
         Assert.Contains("EnsureAuthorizedAsync", program);
         Assert.Contains("#endif", program);
-        Assert.Contains("if (!enterpriseSession)", program);
+        Assert.Contains("if (!enterpriseSession && !strictAgentGateGranted)", program);
         Assert.True(program.IndexOf("TryRedeemAsync", StringComparison.Ordinal) <
             program.IndexOf("GracePeriodClient", StringComparison.Ordinal));
     }
@@ -271,7 +311,7 @@ public sealed class PackageContractTests
             RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
 
         var redeem = program.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
-        var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
+        var fallback = program.IndexOf("if (!enterpriseSession && !strictAgentGateGranted)", StringComparison.Ordinal);
         var standalone = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
         Assert.True(redeem >= 0 && fallback > redeem && standalone > fallback);
     }

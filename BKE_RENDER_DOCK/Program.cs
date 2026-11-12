@@ -23,6 +23,10 @@ namespace BKE_MediaTools
 
             ApplicationConfiguration.Initialize();
 
+            // Only the Agent's process-bound signed-policy decision can set this.
+            // Normal 1.0.3 retail builds retain their existing legacy paths.
+            bool strictAgentGateGranted = false;
+
 #if BKE_STARTUP_GATE_CERTIFICATION
             // PREPRODUCTION ONLY: Agent must authenticate this very Windows
             // process and commit a signed-policy/credential/audit-backed grant
@@ -47,6 +51,16 @@ namespace BKE_MediaTools
                 Environment.ExitCode = 84;
                 return;
             }
+            strictAgentGateGranted = true;
+
+#if BKE_STARTUP_GATE_ACCEPTANCE
+            // Separate NONSHIPPABLE HEADLESS acceptance binary. A zero exit
+            // proves the real SDK returned an Agent grant for THIS process.
+            // The acceptance harness independently verifies the Agent's
+            // durable grant row; this marker is not commercial authority.
+            Environment.ExitCode = 0;
+            return;
+#endif
 #endif
 
             bool enterpriseSession;
@@ -63,7 +77,7 @@ namespace BKE_MediaTools
             // when licensing subsequently denies application startup.
             NotificationCoordinator.ShowBeforeLicensing(enterpriseSession);
 
-            if (!enterpriseSession)
+            if (!enterpriseSession && !strictAgentGateGranted)
             {
                 bool graceActive;
                 using (var gracePeriodClient = new GracePeriodClient())

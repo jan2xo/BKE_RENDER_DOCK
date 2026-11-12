@@ -1,0 +1,71 @@
+name: PREPRODUCTION - Manual installed Agent startup acceptance (Render Dock)
+
+# Human-approved disposable Windows runner only. This workflow never installs,
+# alters trust, creates keys, edits databases or publishes product binaries.
+on:
+  workflow_dispatch:
+    inputs:
+      product_source_sha:
+        description: Exact merged Render Dock main SHA used for reviewed NONSHIPPABLE build
+        required: true
+        type: string
+      agent_source_sha:
+        description: Exact reviewed Agent source SHA (operator claim, not installation provenance)
+        required: true
+        type: string
+      installed_exe_sha256:
+        description: Exact installed acceptance EXE SHA256; already bound by signed DS policy
+        required: true
+        type: string
+      credential_mode:
+        description: Already provisioned and independently proved Agent credential
+        required: true
+        type: choice
+        options: [ACCOUNT, LICENSE_KEY, EITHER]
+
+permissions:
+  contents: read
+
+jobs:
+  installed-real-agent:
+    name: Actual installed signed-policy grant and durable audit (human-only)
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, windows, x64, bke-disposable-startup]
+    environment: bke-disposable-startup-review
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact merged source without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify main source pin before privileged acceptance
+        shell: pwsh
+        env:
+          REVIEWED_SHA: ${{ inputs.product_source_sha }}
+        run: |
+          if ((git rev-parse HEAD).Trim() -cne $env:REVIEWED_SHA) {
+            throw 'Manual installed proof is not the exact reviewed merged product SHA'
+          }
+      - name: Read-only exact-process installed Agent startup proof
+        shell: pwsh
+        env:
+          PRODUCT_SHA: ${{ inputs.product_source_sha }}
+          AGENT_SHA: ${{ inputs.agent_source_sha }}
+          PRODUCT_IMAGE_SHA256: ${{ inputs.installed_exe_sha256 }}
+          CREDENTIAL_MODE: ${{ inputs.credential_mode }}
+        run: |
+          .\scripts\certification\invoke-installed-agent-startup-acceptance.ps1 `
+            -ExpectedRenderDockSourceSha $env:PRODUCT_SHA `
+            -ExpectedAgentSourceSha $env:AGENT_SHA `
+            -ExpectedExecutableSha256 $env:PRODUCT_IMAGE_SHA256 `
+            -ExpectedCredential $env:CREDENTIAL_MODE `
+            -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'bke-startup-approved-evidence') `
+            -ApprovedDisposableMachine
+      - name: Upload sanitized read-only acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bke-renderdock-preproduction-installed-agent-acceptance
+          path: ${{ runner.temp }}/bke-startup-approved-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14

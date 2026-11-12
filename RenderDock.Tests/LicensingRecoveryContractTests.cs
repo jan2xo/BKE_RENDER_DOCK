@@ -30,7 +30,7 @@ public sealed class LicensingRecoveryContractTests
             RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
 
         var broadcast = program.IndexOf("NotificationCoordinator.ShowBeforeLicensing", StringComparison.Ordinal);
-        var fallback = program.IndexOf("if (!enterpriseSession)", StringComparison.Ordinal);
+        var fallback = program.IndexOf("if (!enterpriseSession && !strictAgentGateGranted)", StringComparison.Ordinal);
         var authorize = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
 
         Assert.True(broadcast >= 0 && fallback > broadcast && authorize > fallback);
