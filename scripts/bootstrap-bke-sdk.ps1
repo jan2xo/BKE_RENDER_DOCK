@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$SdkCommit = '8563d86976f65cd0cfcdd7e21c6c428c561e5dfe'
+    [string]$SdkCommit = 'e34431f5400aab00e87549b8aae8dedc3104f4bb',
+    [switch]$CertifyStartupGateClient
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,13 +37,20 @@ try {
     }
 
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.2.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Notifications.0.5.0.nupkg') -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg') -Force -ErrorAction SilentlyContinue
+
+    if ($CertifyStartupGateClient) {
+        dotnet test (Join-Path $workDirectory 'tests/BKE.Desktop.Licensing.Tests/BKE.Desktop.Licensing.Tests.csproj') `
+            --configuration Release --verbosity normal
+        if ($LASTEXITCODE -ne 0) { throw 'Exact pinned SDK failed native Windows startup-gate denial tests.' }
+    }
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Desktop.Licensing/BKE.Desktop.Licensing.csproj') `
         --configuration Release `
         --output $packageDirectory
-    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.1 from canonical SDK source.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Desktop.Licensing 2.0.2 from canonical SDK source.' }
 
     dotnet pack (Join-Path $workDirectory 'src/BKE.Notifications/BKE.Notifications.csproj') `
         --configuration Release `
@@ -54,11 +62,11 @@ try {
         --output $packageDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Failed to build BKE.Updater 0.4.0 from canonical SDK source.' }
 
-    $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.1.nupkg'
+    $licensing = Join-Path $packageDirectory 'BKE.Desktop.Licensing.2.0.2.nupkg'
     $notifications = Join-Path $packageDirectory 'BKE.Notifications.0.5.0.nupkg'
     $updater = Join-Path $packageDirectory 'BKE.Updater.0.4.0.nupkg'
     if (-not (Test-Path -LiteralPath $licensing -PathType Leaf)) {
-        throw 'BKE.Desktop.Licensing 2.0.1 package was not produced.'
+        throw 'BKE.Desktop.Licensing 2.0.2 package was not produced.'
     }
     if (-not (Test-Path -LiteralPath $notifications -PathType Leaf)) {
         throw 'BKE.Notifications 0.5.0 package was not produced.'

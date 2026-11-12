@@ -23,6 +23,32 @@ namespace BKE_MediaTools
 
             ApplicationConfiguration.Initialize();
 
+#if BKE_STARTUP_GATE_CERTIFICATION
+            // PREPRODUCTION ONLY: Agent must authenticate this very Windows
+            // process and commit a signed-policy/credential/audit-backed grant
+            // before ANY enterprise, legacy grace, license or application path.
+            // No response, fake pipe, timeout or exception can fall back to grace.
+            bool agentGranted = false;
+            try
+            {
+                using var startupTimeout = new CancellationTokenSource(
+                    TimeSpan.FromSeconds(10));
+                agentGranted = new BkeStandaloneStartupGateClient()
+                    .AuthorizeConnectedProcessAsync(startupTimeout.Token)
+                    .GetAwaiter().GetResult().Authorized;
+            }
+            catch (Exception)
+            {
+                // A failed preproduction startup proof never opens the UI.
+            }
+
+            if (!agentGranted)
+            {
+                Environment.ExitCode = 84;
+                return;
+            }
+#endif
+
             bool enterpriseSession;
             using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
             {
