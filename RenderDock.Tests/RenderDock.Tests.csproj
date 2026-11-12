@@ -12,4 +12,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+  <ItemGroup>
+    <!-- Pure presentation model of the compact dock (no WinForms dependency). -->
+    <Compile Include="..\BKE_RENDER_DOCK\CompactUi\DockJobFeed.cs" Link="CompactUi\DockJobFeed.cs" />
+  </ItemGroup>
 </Project>
