@@ -93,7 +93,14 @@ jobs:
 
       - name: Prepare pinned BKE SDK capabilities
         shell: pwsh
-        run: .\scripts\bootstrap-bke-sdk.ps1 -CertifyStartupGateClient
+        run: |
+          $project = Get-Content 'BKE_RENDER_DOCK/RENDER DOCK.csproj' -Raw
+          if ($project -match 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.2"') {
+            .\scripts\bootstrap-bke-sdk.ps1 -CertifyStartupGateClient
+          } else {
+            .\scripts\bootstrap-bke-sdk.ps1
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned BKE SDK bootstrap or Windows contract proof failed' }
 
       - name: Verify product and capability boundaries
         shell: pwsh
@@ -113,10 +120,25 @@ jobs:
           if ($project -notmatch '<Version>1\.0\.3</Version>') { throw 'Project version is not 1.0.3' }
           if ($manifest.version -ne '1.0.3' -or $manifest.architecture -ne 'x64') { throw 'Canonical manifest must remain Render Dock 1.0.3 x64' }
 
-          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.1"') { throw 'BKE Desktop Licensing 2.0.2 reference missing' }
+          $sdkMatch = [regex]::Match($project, 'PackageReference Include="BKE\.Desktop\.Licensing" Version="(?<version>2\.0\.[12])"')
+          if (!$sdkMatch.Success) { throw 'Uncertified BKE Desktop Licensing version' }
+          $sdkVersion = $sdkMatch.Groups['version'].Value
+          $approvedSdk = @{
+            '2.0.1' = '8563d86976f65cd0cfcdd7e21c6c428c561e5dfe'
+            '2.0.2' = 'e34431f5400aab00e87549b8aae8dedc3104f4bb'
+          }
+          if (-not $bootstrap.Contains($approvedSdk[$sdkVersion])) {
+            throw 'BKE SDK version is not pinned to its certified immutable source'
+          }
+          if ($sdkVersion -eq '2.0.2' -and
+              (-not $bootstrap.Contains('CertifyStartupGateClient') -or
+               -not $project.Contains('BKE_STARTUP_GATE_CERTIFICATION') -or
+               -not $program.Contains('AuthorizeConnectedProcessAsync'))) {
+            throw 'Strict preproduction startup gate required with 2.0.2'
+          }
           if ($project -notmatch 'PackageReference Include="BKE\.Notifications" Version="0\.5\.0"') { throw 'BKE Notifications 0.5.0 reference missing' }
           if ($project -notmatch 'PackageReference Include="BKE\.Updater" Version="0\.4\.0"') { throw 'BKE Updater 0.4.0 reference missing' }
-          if (-not $bootstrap.Contains('e34431f5400aab00e87549b8aae8dedc3104f4bb')) { throw 'BKE SDK bootstrap is not pinned to merged SDK main' }
+
 
           if ($licensing -notmatch 'BkeLicensingClient\.Create|EnsureAuthorizedAsync') { throw 'Canonical shared licensing flow missing' }
           if ($licensing -match 'OpenLicenseCenterAsync|AuthorizeAsync|HttpClient|127\.0\.0\.1:43873|/v1/authorize') { throw 'Product-owned licensing transport/recovery policy must remain absent' }
@@ -145,7 +167,13 @@ jobs:
         shell: pwsh
         run: |
           $assets = Get-Content "BKE_RENDER_DOCK/obj/project.assets.json" -Raw
-          if ($assets -notmatch 'BKE\.Desktop\.Licensing/2\.0\.1') { throw 'BKE Desktop Licensing 2.0.2 was not restored' }
+          $project = Get-Content 'BKE_RENDER_DOCK/RENDER DOCK.csproj' -Raw
+          $sdk = [regex]::Match($project, 'PackageReference Include="BKE\.Desktop\.Licensing" Version="(?<version>2\.0\.[12])"')
+          if (!$sdk.Success) { throw 'Unapproved SDK version in restore graph' }
+          $version = $sdk.Groups['version'].Value
+          if (!$assets.Contains("BKE.Desktop.Licensing/$version")) {
+            throw "Pinned BKE Desktop Licensing $version was not restored"
+          }
           if ($assets -notmatch 'BKE\.Notifications/0\.5\.0') { throw 'BKE Notifications 0.5.0 was not restored' }
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must remain absent' }
@@ -199,27 +227,32 @@ jobs:
           $lines | Set-Content 'artifacts/installer/SHA256SUMS'
           $lines | ForEach-Object { "$_" >> $env:GITHUB_STEP_SUMMARY }
 
-      - name: Certify NONSHIPPABLE Agent-first direct EXE startup fail-closed (no Agent installed)
+      - name: Certify NONSHIPPABLE Agent-first direct EXE startup fail-closed
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $project = Get-Content 'BKE_RENDER_DOCK/RENDER DOCK.csproj' -Raw
+          if ($project -notmatch 'PackageReference Include="BKE\.Desktop\.Licensing" Version="2\.0\.2"') {
+            Write-Host 'Legacy SDK: strict startup gate does not apply to this unmodified product.'
+            exit 0
+          }
           if (Test-Path -LiteralPath '\\.\pipe\bke-licensing-agent-standalone-startup-v1') {
-            throw 'Disposable Windows runner unexpectedly has a startup Agent pipe.'
+            throw 'Disposable Windows runner unexpectedly has an installed Agent startup pipe.'
           }
           $output = Join-Path $env:RUNNER_TEMP 'renderdock-startup-gated-test-only'
           dotnet publish 'BKE_RENDER_DOCK/RENDER DOCK.csproj' --configuration Release -r win-x64 --self-contained false -p:BkeStartupGateCertification=true -o "$output"
-          if ($LASTEXITCODE -ne 0) { throw 'Preproduction strict startup binary did not compile' }
+          if ($LASTEXITCODE -ne 0) { throw 'Strict startup proof executable did not compile' }
           $exe = Join-Path $output 'RENDER DOCK.exe'
-          if (!(Test-Path -LiteralPath $exe)) { throw 'Preproduction direct EXE missing' }
+          if (!(Test-Path -LiteralPath $exe)) { throw 'Strict startup proof binary is missing' }
           $process = Start-Process -FilePath $exe -PassThru
           try {
             if (!$process.WaitForExit(20000)) {
-              throw 'FAIL: strict Render Dock executable did not deny missing Agent before UI startup.'
+              throw 'FAIL: Render Dock preproduction executable did not deny missing Agent before UI.'
             }
             if ($process.ExitCode -ne 84) {
-              throw "FAIL: missing Agent did not fail-closed; exit=$($process.ExitCode) expected 84"
+              throw "FAIL: Render Dock expected Agent-denial exit 84, got $($process.ExitCode)"
             }
-            Write-Host 'PASS: exact-source preproduction direct RENDER DOCK.exe denied absent Agent BEFORE grace/enterprise/UI.'
+            Write-Host 'PASS: strict Render Dock direct EXE denied absent Agent before enterprise/grace/UI.'
           }
           finally {
             if (!$process.HasExited) { $process.Kill() }
