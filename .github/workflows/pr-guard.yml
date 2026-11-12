@@ -1,0 +1,33 @@
+name: Render Dock PR Guard
+
+# Cheap PR ledger validation ONLY. Full Windows suites are dispatched by
+# /certify renderdock windows-x64 on an authorized PR comment.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: PR Guard (cheap)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Check exact PR candidate SHA and source contract files
+        shell: bash
+        env:
+          REQUIRED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REQUIRED_SHA"
+          test -s "BKE_RENDER_DOCK/Program.cs"
+          test -s "BKE_RENDER_DOCK/bke.manifest.json"
+          test -s "RenderDock.Tests/PackageContractTests.cs"
+          test -s "BKE_RENDER_DOCK/RENDER DOCK.csproj"
+          echo "PASS PR Guard for exact Render Dock head $REQUIRED_SHA; heavy certification NOT requested."
