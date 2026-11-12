@@ -68,7 +68,7 @@ public sealed class PackageContractTests
 
         Assert.Equal("net10.0-windows", project.Descendants("TargetFramework").Single().Value);
         Assert.Equal("net10.0", testProject.Descendants("TargetFramework").Single().Value);
-        AssertPackage(project, "BKE.Desktop.Licensing", "2.0.1");
+        AssertPackage(project, "BKE.Desktop.Licensing", "2.0.2");
         AssertPackage(project, "BKE.Notifications", "0.5.0");
         AssertPackage(project, "BKE.Updater", "0.4.0");
         Assert.DoesNotContain(
@@ -137,8 +137,8 @@ public sealed class PackageContractTests
         var bootstrap = File.ReadAllText(Path.Combine(
             RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
 
-        Assert.Contains("8563d86976f65cd0cfcdd7e21c6c428c561e5dfe", bootstrap);
-        Assert.Contains("BKE.Desktop.Licensing.2.0.1.nupkg", bootstrap);
+        Assert.Contains("e34431f5400aab00e87549b8aae8dedc3104f4bb", bootstrap);
+        Assert.Contains("BKE.Desktop.Licensing.2.0.2.nupkg", bootstrap);
         Assert.Contains("BKE.Notifications.0.5.0.nupkg", bootstrap);
         Assert.Contains("BKE.Updater.0.4.0.nupkg", bootstrap);
         Assert.DoesNotContain("packages/BKE.Desktop.Client.1.0.0", bootstrap, StringComparison.OrdinalIgnoreCase);
@@ -207,6 +207,56 @@ public sealed class PackageContractTests
         Assert.Contains("if (enterpriseSession)", coordinator);
         Assert.DoesNotContain("Environment.GetCommandLineArgs", client, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Environment.GetCommandLineArgs", program, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void StrictPreproductionStartupRequiresAgentBeforeEveryLegacyPath()
+    {
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        var project = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "RENDER DOCK.csproj"));
+        var bootstrap = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
+
+        Assert.Contains("<BkeStartupGateCertification Condition=", project);
+        Assert.Contains(">false</BkeStartupGateCertification>", project);
+        Assert.Contains("Condition=\"'$(BkeStartupGateCertification)' == 'true'\"", project);
+        Assert.Contains("BKE_STARTUP_GATE_CERTIFICATION", project);
+        Assert.Contains("#if BKE_STARTUP_GATE_CERTIFICATION", program);
+        Assert.Contains("new BkeStandaloneStartupGateClient()", program);
+        Assert.Contains("Environment.ExitCode = 84;", program);
+        Assert.Contains("if (!agentGranted)", program);
+
+        var gate = program.IndexOf("AuthorizeConnectedProcessAsync", StringComparison.Ordinal);
+        var enterprise = program.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
+        var grace = program.IndexOf("GracePeriodClient", StringComparison.Ordinal);
+        var notifications = program.IndexOf("NotificationCoordinator.ShowBeforeLicensing", StringComparison.Ordinal);
+        var licensing = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
+        var ui = program.IndexOf("Application.Run(mainForm)", StringComparison.Ordinal);
+        Assert.True(gate >= 0 && gate < enterprise && gate < grace &&
+            gate < notifications && gate < licensing && gate < ui,
+            "Preproduction machine-bound verdict must precede all old startup paths.");
+        Assert.DoesNotContain("NamedPipeClientStream", ProductSources(), StringComparison.Ordinal);
+        Assert.DoesNotContain("bke-licensing-agent-standalone-startup-v1", ProductSources(),
+            StringComparison.Ordinal);
+        Assert.Contains("e34431f5400aab00e87549b8aae8dedc3104f4bb", bootstrap);
+        Assert.Contains("CertifyStartupGateClient", bootstrap);
+        Assert.Contains("BKE.Desktop.Licensing.2.0.2.nupkg", bootstrap);
+    }
+
+    [Fact]
+    public void ShippingLegacyGraceAndEnterpriseBehaviorAreNotSilentlyRemoved()
+    {
+        var program = File.ReadAllText(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
+        Assert.Contains("GracePeriodClient", program);
+        Assert.Contains("TryRedeemAsync", program);
+        Assert.Contains("EnsureAuthorizedAsync", program);
+        Assert.Contains("#endif", program);
+        Assert.Contains("if (!enterpriseSession)", program);
+        Assert.True(program.IndexOf("TryRedeemAsync", StringComparison.Ordinal) <
+            program.IndexOf("GracePeriodClient", StringComparison.Ordinal));
     }
 
     [Fact]
