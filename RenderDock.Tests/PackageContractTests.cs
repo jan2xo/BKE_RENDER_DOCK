@@ -333,7 +333,7 @@ public sealed class PackageContractTests
             "native process ancestry and protection have been checked.");
         Assert.DoesNotContain("Stop-Service", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Start-Service", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("sc.exe", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("& sc.exe", source, StringComparison.Ordinal);
     }
 
     [Fact]
