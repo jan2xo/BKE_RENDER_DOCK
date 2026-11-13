@@ -6,7 +6,7 @@ namespace RenderDock.Tests;
 
 /// <summary>
 /// Nonshippable native Windows probe: executable must fail BEFORE enterprise,
-/// legacy grace or UI when the installed Agent is absent. Does not claim a
+/// commercial-key licensing or UI when the installed Agent is absent. Does not claim a
 /// positive installed Agent or hardware TPM result.
 /// </summary>
 public sealed class InstalledAgentAcceptanceHarnessTests
