@@ -34,13 +34,15 @@ namespace BKE_MediaTools
             // before ANY enterprise, signed-key licensing or application path.
             // No response, fake pipe, timeout or exception can bypass denial.
             bool agentGranted = false;
+            StandaloneStartupGateResult? agentDecision = null;
             try
             {
                 using var startupTimeout = new CancellationTokenSource(
                     TimeSpan.FromSeconds(10));
-                agentGranted = new BkeStandaloneStartupGateClient()
+                agentDecision = new BkeStandaloneStartupGateClient()
                     .AuthorizeConnectedProcessAsync(startupTimeout.Token)
-                    .GetAwaiter().GetResult().Authorized;
+                    .GetAwaiter().GetResult();
+                agentGranted = agentDecision.Authorized;
             }
             catch (Exception)
             {
@@ -49,7 +51,15 @@ namespace BKE_MediaTools
 
             if (!agentGranted)
             {
+#if BKE_STARTUP_GATE_ACCEPTANCE
+                // NONSHIPPABLE headless proof only: 85 means the SDK verified
+                // the installed Agent transport and received an explicit DENY.
+                // Missing, fake or untrusted Agent remains 84. Neither opens UI.
+                Environment.ExitCode =
+                    agentDecision?.Status == StandaloneStartupGateStatus.Denied ? 85 : 84;
+#else
                 Environment.ExitCode = 84;
+#endif
                 return;
             }
             strictAgentGateGranted = true;
