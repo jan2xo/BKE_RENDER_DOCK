@@ -181,7 +181,85 @@ try {
         $logFlags+=($rule.Name + ':' + $count)
       }
     }
+    # The canonical installer removed its failed fresh-install service.
+    # Re-stage ONLY the exact source-built runtime and public test trust in
+    # the protected ephemeral path and observe bootstrap. This is a diagnostic,
+    # NOT installed SYSTEM service, signed commercial authorization or grant.
+    $runtimeProbe='NOT_RUN'
+    $runtimeProbeError='NONE'
+    if (!$registration -and !$canonicalServiceExe -and !$canonicalRuntimeExe) {
+      $probeProcess=$null
+      $oldAgentData=$env:BKE_AGENT_DATA_DIR
+      $oldServiceHosted=$env:BKE_AGENT_SERVICE_HOSTED
+      try {
+        $sourceRuntime=Join-Path $agentSource 'dist/windows/bke-licensing-agent-runtime'
+        $sourceHostExe=Join-Path $sourceRuntime 'bke-licensing-agent-runtime.exe'
+        $pub=Join-Path $fixture 'account-product-lease-keys\issuers.json'
+        $policy=Join-Path $fixture 'standalone-startup-policies\bke-render-dock.json'
+        if (!(Test-Path -LiteralPath $sourceHostExe -PathType Leaf) -or
+            !(Test-Path -LiteralPath $pub -PathType Leaf) -or
+            !(Test-Path -LiteralPath $policy -PathType Leaf)) {
+          $runtimeProbe='SOURCE_PAYLOAD_MISSING'
+        }
+        else {
+          $runtimeProbeDir=Join-Path $agentRoot 'runtime'
+          $issuerDir=Join-Path $agentRoot 'trust\account-product-lease-keys'
+          $policyDir=Join-Path $agentRoot 'trust\standalone-startup-policies'
+          foreach ($dir in @($agentRoot,$runtimeProbeDir,$issuerDir,$policyDir)) {
+            if (Test-Path -LiteralPath $dir) {
+              if ((Get-Item -LiteralPath $dir).Attributes -band
+                  [IO.FileAttributes]::ReparsePoint) {
+                throw 'Redirected installed test directory: refuse probe.'
+              }
+            }
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          }
+          Get-ChildItem -LiteralPath $sourceRuntime -Force |
+            Copy-Item -Destination $runtimeProbeDir -Recurse -Force
+          Copy-Item -LiteralPath $pub -Destination (Join-Path $issuerDir 'issuers.json')
+          Copy-Item -LiteralPath $policy -Destination (Join-Path $policyDir 'bke-render-dock.json')
+          # No production DS, real credential or authorization request.
+          $env:BKE_AGENT_DATA_DIR=$agentData
+          $env:BKE_AGENT_SERVICE_HOSTED='1'
+          $stdoutPath=Join-Path $env:RUNNER_TEMP 'bke-host-runtime-probe-stdout.txt'
+          $stderrPath=Join-Path $env:RUNNER_TEMP 'bke-host-runtime-probe-stderr.txt'
+          $probeProcess=Start-Process -FilePath (Join-Path $runtimeProbeDir 'bke-licensing-agent-runtime.exe') -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+          if ($probeProcess.WaitForExit(6500)) {
+            $runtimeProbe='EXITED_' + $probeProcess.ExitCode
+          }
+          else { $runtimeProbe='HELD_OPEN_FOR_6S' }
+          if (Test-Path -LiteralPath $stderrPath) {
+            $lines=@(Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue |
+              Where-Object { $_ -match '(?i)failed|invalid|unavailable|missing|refused' } |
+              Select-Object -Last 3)
+            $safe=@()
+            foreach ($line in $lines) {
+              $clean=$line -replace '(?i)https?://\S+','[URL]'
+              $clean=$clean -replace '\b[0-9a-fA-F]{40,}\b','[HASH]'
+              $clean=$clean -replace '[A-Za-z0-9+/]{64,}={0,2}','[OPAQUE]'
+              $safe+=$clean.Substring(0,[Math]::Min(180,$clean.Length))
+            }
+            $runtimeProbeError=($safe -join ' | ')
+          }
+        }
+      }
+      catch { $runtimeProbe='PROBE_ERROR_' + $_.Exception.GetType().Name }
+      finally {
+        if ($probeProcess) {
+          try {
+            if (!$probeProcess.HasExited) {
+              $probeProcess.Kill()
+              $probeProcess.WaitForExit(5000) | Out-Null
+            }
+          } finally { $probeProcess.Dispose() }
+        }
+        $env:BKE_AGENT_DATA_DIR=$oldAgentData
+        $env:BKE_AGENT_SERVICE_HOSTED=$oldServiceHosted
+      }
+    }
     $observed=[ordered]@{
+      runtime_source_probe=$runtimeProbe
+      runtime_source_probe_error=$runtimeProbeError
       scm_state=$state
       service_account=$identity
       canonical_service_image=$imageMatches
