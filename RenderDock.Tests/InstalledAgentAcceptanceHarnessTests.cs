@@ -24,7 +24,14 @@ public sealed class InstalledAgentAcceptanceHarnessTests
         Assert.False(Directory.Exists(agentPath),
             "Disposable hosted Windows runner unexpectedly has an installed Agent; refuse negative proof.");
 
-        var folder = Path.Combine(Path.GetTempPath(),
+        // CI's guarded disposable installation may consume ONLY RUNNER_TEMP.
+        // Path.GetTempPath() on hosted Windows can point to a different volume.
+        var testTemporaryRoot =
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"
+                ? Environment.GetEnvironmentVariable("RUNNER_TEMP") ??
+                    throw new InvalidOperationException("GitHub RUNNER_TEMP missing")
+                : Path.GetTempPath();
+        var folder = Path.Combine(testTemporaryRoot,
             "bke-renderdock-acceptance-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
@@ -53,11 +60,59 @@ public sealed class InstalledAgentAcceptanceHarnessTests
             }, TimeSpan.FromMinutes(2));
             Assert.NotEqual(0, illegal.ExitCode);
             Assert.Contains("NONSHIPPABLE strict preproduction", illegal.Output + illegal.Error);
+
+            // This EXTRA integration proof is never run on a developer or
+            // customer machine. The trusted main Windows x64 certification
+            // already runs this xUnit test against the exact PR source head.
+            // CI-only proof installs a freshly built canonical SYSTEM Agent
+            // with an ephemeral signed test policy; a genuine commercial
+            // credential is DELIBERATELY ABSENT, so real Render Dock must
+            // receive the exact missing-credential reason (test exit 86).
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+            {
+                var reviewedHead = Environment.GetEnvironmentVariable("SOURCE_SHA");
+                Assert.Matches("^[a-f0-9]{40}$", reviewedHead ?? "");
+                var script = Path.Combine(RepoRoot, "scripts", "certification",
+                    "invoke-hosted-installed-agent-denial.ps1");
+                Assert.True(File.Exists(script), "Hosted installed Agent test script missing");
+                const string agentSource = "f594063493ddf39b4acb11a049eb3d4234f42794";
+                var installed = await RunAsync("pwsh", new[] {
+                    "-NoProfile", "-NonInteractive", "-File", script,
+                    "-ExpectedRenderDockSourceSha", reviewedHead!,
+                    "-ExpectedAgentSourceSha", agentSource,
+                    "-AcceptanceBuildDirectory", folder,
+                    "-ApprovedDisposableWindowsRunner"
+                }, TimeSpan.FromMinutes(28));
+                Assert.True(installed.ExitCode == 0,
+                    "Real installed SYSTEM Agent / Render Dock denial test failed: " +
+                    installed.Error + Environment.NewLine +
+                    installed.Output[^Math.Min(installed.Output.Length, 5000)..]);
+                Assert.Contains("HOSTED_INSTALLED_AGENT_RENDER_DOCK_DENIAL_PASS",
+                    installed.Output);
+            }
         }
         finally
         {
             Directory.Delete(folder, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task HostedInstalledAgentHarnessCannotRunWithoutDisposableApproval()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var script = Path.Combine(RepoRoot, "scripts", "certification",
+            "invoke-hosted-installed-agent-denial.ps1");
+        Assert.True(File.Exists(script));
+        var result = await RunAsync("pwsh", new[] {
+            "-NoProfile", "-NonInteractive", "-File", script,
+            "-ExpectedRenderDockSourceSha", new string('a', 40),
+            "-ExpectedAgentSourceSha", new string('b', 40),
+            "-AcceptanceBuildDirectory", Path.GetTempPath()
+        }, TimeSpan.FromSeconds(20));
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Only explicitly approved disposable Windows x64 GitHub Actions",
+            result.Output + result.Error);
     }
 
     [Fact]

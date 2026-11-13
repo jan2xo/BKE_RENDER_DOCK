@@ -34,13 +34,15 @@ namespace BKE_MediaTools
             // before ANY enterprise, signed-key licensing or application path.
             // No response, fake pipe, timeout or exception can bypass denial.
             bool agentGranted = false;
+            StandaloneStartupGateResult? agentDecision = null;
             try
             {
                 using var startupTimeout = new CancellationTokenSource(
                     TimeSpan.FromSeconds(10));
-                agentGranted = new BkeStandaloneStartupGateClient()
+                agentDecision = new BkeStandaloneStartupGateClient()
                     .AuthorizeConnectedProcessAsync(startupTimeout.Token)
-                    .GetAwaiter().GetResult().Authorized;
+                    .GetAwaiter().GetResult();
+                agentGranted = agentDecision.Authorized;
             }
             catch (Exception)
             {
@@ -49,7 +51,22 @@ namespace BKE_MediaTools
 
             if (!agentGranted)
             {
+#if BKE_STARTUP_GATE_ACCEPTANCE
+                // NONSHIPPABLE headless proof only. Do not mistake ANY
+                // Agent denial for evidence of an otherwise valid signed
+                // installed product that merely lacks a commercial credential.
+                // 84: absent/fake/untrusted Agent; 85: Agent denied for another
+                // reason; 86: trusted Agent specifically requires independent
+                // ACCOUNT/LICENSE_KEY proof. None of these opens the UI.
+                Environment.ExitCode =
+                    agentDecision?.Status != StandaloneStartupGateStatus.Denied
+                        ? 84
+                        : agentDecision?.Reason == "independent_credential_required"
+                            ? 86
+                            : 85;
+#else
                 Environment.ExitCode = 84;
+#endif
                 return;
             }
             strictAgentGateGranted = true;
