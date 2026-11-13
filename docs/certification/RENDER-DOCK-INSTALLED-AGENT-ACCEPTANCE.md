@@ -11,10 +11,12 @@
 > by SDK-verified installed Agent and *no* durable grant.
 >
 > Distinct NONSHIPPABLE headless exit codes: `84` = Agent absent/untrusted/
-> transport error, `85` = genuine installed Agent responded **DENIED**,
-> `0` = actual audited Agent grant. Exit `85` is not a customer binary behavior,
-> successful authorization, genuine DS issuance, or a substitute for positive
-> human acceptance. The helper operates only on a newly empty, explicitly
+> transport error; `85` = authenticated installed Agent denied for any other
+> reason (**NOT proof that only the credential was missing**); `86` = Agent
+> specifically responded `independent_credential_required` after accepting
+> the process and signed policy; `0` = actual audited Agent grant. Neither
+> `85` nor `86` is a customer binary behavior, successful authorization,
+> genuine DS issuance, or a substitute for positive human acceptance. The helper operates only on a newly empty, explicitly
 > approved ephemeral Windows GitHub runner and cleans up the service. **Never
 > transfer or upload generated installer or issuer bundle to a customer.**
 >
