@@ -1,0 +1,205 @@
+# NONSHIPPABLE GitHub-hosted Windows SYSTEM Agent / Render Dock denial certification.
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory)][string]$ExpectedRenderDockSourceSha,
+  [Parameter(Mandatory)][string]$ExpectedAgentSourceSha,
+  [Parameter(Mandatory)][string]$AcceptanceBuildDirectory,
+  [switch]$ApprovedDisposableWindowsRunner
+)
+$ErrorActionPreference='Stop'
+Set-StrictMode -Version Latest
+if (!$ApprovedDisposableWindowsRunner -or $env:GITHUB_ACTIONS -cne 'true' -or
+    $env:RUNNER_OS -cne 'Windows' -or !$IsWindows -or
+    ![Environment]::Is64BitOperatingSystem -or !$env:RUNNER_TEMP) {
+  throw 'Only explicitly approved disposable Windows x64 GitHub Actions.'
+}
+foreach ($sha in @($ExpectedRenderDockSourceSha,$ExpectedAgentSourceSha)) {
+  if ($sha -cnotmatch '^[a-f0-9]{40}$') { throw 'Exact Git SHAs required.' }
+}
+$repo=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+if ($env:SOURCE_SHA -cne $ExpectedRenderDockSourceSha -or
+    (git -C $repo rev-parse HEAD).Trim() -cne $ExpectedRenderDockSourceSha) {
+  throw 'Exact Render Dock reviewed head required.'
+}
+$principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  throw 'Windows hosted installation requires elevated disposable runner.'
+}
+$programFiles=[Environment]::GetFolderPath('ProgramFiles')
+$agentRoot=Join-Path $programFiles 'BKE Digital Solutions\Licensing Agent'
+$productRoot=Join-Path $programFiles 'BKE Digital Solutions\Render Dock'
+$agentData=Join-Path $env:ProgramData 'BKE Digital Solutions\Licensing Agent'
+$service='BKE-Licensing-Agent'
+$realImage=Join-Path $productRoot 'RENDER DOCK.exe'
+$runtime=Join-Path $agentRoot 'runtime\bke-licensing-agent-runtime.exe'
+if ((Get-Service -Name $service -ErrorAction SilentlyContinue) -or
+    (Test-Path -LiteralPath $agentRoot) -or (Test-Path -LiteralPath $productRoot) -or
+    (Test-Path -LiteralPath $agentData)) {
+  throw 'Preexisting installed BKE state; do not overwrite or modify.'
+}
+$build=[IO.Path]::GetFullPath($AcceptanceBuildDirectory)
+$temp=[IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')
+if (!$build.StartsWith($temp+'\',[StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Accept only NONSHIPPABLE image built into RUNNER_TEMP.'
+}
+$sourceImage=Join-Path $build 'RENDER DOCK.exe'
+if (!(Test-Path -LiteralPath $sourceImage -PathType Leaf)) { throw 'Real Render Dock image absent.' }
+$imageSha=(Get-FileHash -LiteralPath $sourceImage -Algorithm SHA256).Hash.ToLowerInvariant()
+$agentSource=Join-Path $env:RUNNER_TEMP ('bke-agent-src-'+[Guid]::NewGuid().ToString('N'))
+$fixture=Join-Path $env:RUNNER_TEMP ('bke-agent-fixture-'+[Guid]::NewGuid().ToString('N'))
+$installLog=Join-Path $env:RUNNER_TEMP 'agent-disposable-install.log'
+$installed=$false
+$createdProduct=$false
+$createdData=$false
+$oldEnvironment=$env:BKE_ENVIRONMENT
+$oldOrigin=$env:BKE_PLATFORM_BASE_URL
+
+try {
+  New-Item -ItemType Directory -Path $productRoot -Force | Out-Null
+  $createdProduct=$true
+  Get-ChildItem -LiteralPath $build -Force | Copy-Item -Destination $productRoot -Force -Recurse
+  if ((Get-FileHash -LiteralPath $realImage -Algorithm SHA256).Hash.ToLowerInvariant() -cne $imageSha) {
+    throw 'Installed real Render Dock image hash drift.'
+  }
+  New-Item -ItemType Directory -Path $agentData -Force | Out-Null
+  $createdData=$true
+  $origin='http://127.0.0.1:43999'
+  $config="BKE_ENVIRONMENT=certification" + [Environment]::NewLine +
+    "BKE_PLATFORM_BASE_URL=$origin" + [Environment]::NewLine +
+    "BKE_STANDALONE_STARTUP_GATE_ENABLED=1" + [Environment]::NewLine
+  [IO.File]::WriteAllText((Join-Path $agentData '.env'),$config,[Text.UTF8Encoding]::new($false))
+  $env:BKE_ENVIRONMENT='certification'
+  $env:BKE_PLATFORM_BASE_URL=$origin
+  New-Item -ItemType Directory -Path $agentSource -Force | Out-Null
+  & git -C $agentSource init --quiet
+  if ($LASTEXITCODE -ne 0) { throw 'Git init failed.' }
+  & git -C $agentSource remote add origin 'https://github.com/jan2xo/bke-licensing-agent.git'
+  if ($LASTEXITCODE -ne 0) { throw 'Git origin failed.' }
+  & git -C $agentSource fetch --quiet --depth 1 origin $ExpectedAgentSourceSha
+  if ($LASTEXITCODE -ne 0) { throw 'Cannot fetch immutable Agent source SHA.' }
+  & git -C $agentSource checkout --quiet --detach FETCH_HEAD
+  if ($LASTEXITCODE -ne 0 -or
+      (git -C $agentSource rev-parse HEAD).Trim() -cne $ExpectedAgentSourceSha) {
+    throw 'Agent checkout SHA drift.'
+  }
+  Push-Location $agentSource
+  try {
+    & dotnet run --project 'dotnet/certification/BKE.LicensingAgent.ContractCertification/BKE.LicensingAgent.ContractCertification.csproj' --configuration Release -- --emit-disposable-installed-startup-policy $fixture $sourceImage $realImage
+    if ($LASTEXITCODE -ne 0) { throw 'Agent ephemeral public-only signed fixture creation failed.' }
+    $pub=Join-Path $fixture 'account-product-lease-keys\issuers.json'
+    $policy=Join-Path $fixture 'standalone-startup-policies\bke-render-dock.json'
+    if (!(Test-Path -LiteralPath $pub) -or !(Test-Path -LiteralPath $policy) -or
+        (Get-Content $pub -Raw) -match 'PRIVATE KEY' -or
+        (Get-Content $policy -Raw) -match 'PRIVATE KEY') {
+      throw 'Missing public-only issuer or signed policy, or private key leaked.'
+    }
+    & powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File 'scripts\publish_dotnet_windows_payloads.ps1' -Version 2.0.0 -Architecture x64
+    if ($LASTEXITCODE -ne 0) { throw 'Agent .NET-only support payload build failed.' }
+    & dotnet run --project 'dotnet/tools/BKE.LicensingAgent.ReleaseTooling/BKE.LicensingAgent.ReleaseTooling.csproj' --configuration Release -- generate-disposable-trust --root dist/windows --target-key-id ci-target-only --policy-id ci-installed-only --update-key-id ci-update-only
+    if ($LASTEXITCODE -ne 0) { throw 'Agent installer fixture trust generation failed.' }
+    foreach ($target in @(
+      @{project='dotnet/src/BKE.LicensingAgent.Bootstrap/BKE.LicensingAgent.Bootstrap.csproj';output='dist/windows/bke-licensing-agent-service';extra=@('-p:PublishSingleFile=true')},
+      @{project='dotnet/src/BKE.LicensingAgent.Host/BKE.LicensingAgent.Host.csproj';output='dist/windows/bke-licensing-agent-runtime';extra=@('-p:PublishSingleFile=true','-p:BKEAgentRuntimeBridge=true')}
+    )) {
+      New-Item -ItemType Directory -Path $target.output -Force | Out-Null
+      $args=@('publish',$target.project,'--configuration','Release','--runtime','win-x64',
+        '--self-contained','true','-p:Version=2.0.0','--output',$target.output)+$target.extra
+      & dotnet @args
+      if ($LASTEXITCODE -ne 0) { throw "Agent service/runtime publish failed: $($target.project)" }
+    }
+    New-Item -ItemType Directory -Path 'dist/windows/account-product-lease-keys' -Force | Out-Null
+    New-Item -ItemType Directory -Path 'dist/windows/standalone-startup-policies' -Force | Out-Null
+    Copy-Item -LiteralPath $pub -Destination 'dist/windows/account-product-lease-keys/issuers.json'
+    Copy-Item -LiteralPath $policy -Destination 'dist/windows/standalone-startup-policies/bke-render-dock.json'
+    $programFilesX86=[Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+    $iscc=Join-Path $programFilesX86 'Inno Setup 6\ISCC.exe'
+    if (!(Test-Path -LiteralPath $iscc)) {
+      & choco install innosetup -y --no-progress
+      if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation on hosted runner failed.' }
+    }
+    & $iscc 'packaging/windows/bke-licensing-agent.iss'
+    if ($LASTEXITCODE -ne 0) { throw 'Agent canonical installer compilation failed.' }
+    $installer=(Resolve-Path -LiteralPath 'dist/installer/BKE-Licensing-Agent-2.0.0-Windows-x64.exe').Path
+    $installerHash=(Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+  } finally { Pop-Location }
+
+  $installed=$true
+  $setup=Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$installLog") -Wait -PassThru
+  if ($setup.ExitCode -ne 0) { throw "Canonical Agent disposable install failed: $($setup.ExitCode)" }
+  $svc=Get-CimInstance Win32_Service -Filter "Name='$service'"
+  if (!$svc -or $svc.State -ne 'Running' -or
+      $svc.StartName -notin @('LocalSystem','NT AUTHORITY\SYSTEM') -or
+      $svc.PathName -notmatch 'service\\bke-licensing-agent-service\.exe') {
+    throw 'Installed Agent SCM service not LocalSystem/Running/canonical.'
+  }
+  $procs=@(Get-CimInstance Win32_Process -Filter "Name='bke-licensing-agent-runtime.exe'" |
+    Where-Object { $_.ExecutablePath -and [string]::Equals(
+      [IO.Path]::GetFullPath($_.ExecutablePath),[IO.Path]::GetFullPath($runtime),
+      [StringComparison]::OrdinalIgnoreCase) })
+  if ($procs.Count -ne 1) { throw 'Installed Agent runtime process missing or ambiguous.' }
+  $owner=Invoke-CimMethod -InputObject $procs[0] -MethodName GetOwner
+  if ($owner.User -cne 'SYSTEM' -or $owner.Domain -cne 'NT AUTHORITY') {
+    throw 'Installed Agent runtime is not SYSTEM.'
+  }
+  $pipe='\\.\pipe\bke-licensing-agent-standalone-startup-v1'
+  $deadline=[DateTime]::UtcNow.AddSeconds(20)
+  while (!(Test-Path -LiteralPath $pipe) -and [DateTime]::UtcNow -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+  }
+  if (!(Test-Path -LiteralPath $pipe)) { throw 'Installed nonproduction Agent startup pipe absent.' }
+  foreach ($file in @('trust\account-product-lease-keys\issuers.json',
+                      'trust\standalone-startup-policies\bke-render-dock.json')) {
+    if (!(Test-Path -LiteralPath (Join-Path $agentRoot $file))) {
+      throw "Installed Agent trust missing: $file"
+    }
+  }
+  $child=Start-Process -FilePath $realImage -PassThru
+  try {
+    $childProcessId=$child.Id
+    if (!$child.WaitForExit(25000)) { throw 'Render Dock installed startup timed out.' }
+    if ($child.ExitCode -ne 85) {
+      throw "Expected verified installed Agent explicit denial exit 85, got $($child.ExitCode)."
+    }
+    $audit=Join-Path $agentRoot 'startup-grant-audit\grants.db'
+    if (Test-Path -LiteralPath $audit) {
+      $pyCode='import sqlite3,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); n=c.execute("SELECT COUNT(*) FROM startup_grants WHERE pid=?",(int(sys.argv[2]),)).fetchone()[0]; c.close(); sys.exit(1 if n else 0)'
+      & py -3 -c $pyCode $audit ([string]$childProcessId)
+      if ($LASTEXITCODE -ne 0) { throw 'Denied Render Dock received a durable Agent grant.' }
+    }
+    $report=[ordered]@{schema='bke.renderdock-hosted-installed-denial.v1';status='PASS';
+      classification='DISPOSABLE_PREPRODUCTION_DENIAL_ONLY';
+      renderdock_source_sha=$ExpectedRenderDockSourceSha;agent_source_sha=$ExpectedAgentSourceSha;
+      agent_installer_sha256=$installerHash;renderdock_exe_sha256=$imageSha;
+      system_agent=$true;ephemeral_signed_test_issuer=$true;real_commercial_credential=$false;
+      executable_exit_code=85;durable_grant=$false;genuine_ds_issuer='NOT_PROVEN';
+      physical_tpm='NOT_PROVEN';production='LOCKED'}
+    $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'bke-renderdock-installed-denial.json') -Encoding utf8
+    Write-Host 'HOSTED_INSTALLED_AGENT_RENDER_DOCK_DENIAL_PASS: real SYSTEM Agent + Render Dock, test-signed policy, missing credential denied, no durable grant.'
+  } finally {
+    if (!$child.HasExited) { $child.Kill(); $child.WaitForExit() }
+    $child.Dispose()
+  }
+} finally {
+  $env:BKE_ENVIRONMENT=$oldEnvironment
+  $env:BKE_PLATFORM_BASE_URL=$oldOrigin
+  if ($installed) {
+    try {
+      if (Get-Service -Name $service -ErrorAction SilentlyContinue) {
+        Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+        & sc.exe delete $service | Out-Null
+      }
+    } catch { Write-Warning 'Failed to fully clean disposable SCM service.' }
+  }
+  if ($createdProduct -and (Test-Path -LiteralPath $productRoot)) {
+    Remove-Item -LiteralPath $productRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($installed -and (Test-Path -LiteralPath $agentRoot)) {
+    Remove-Item -LiteralPath $agentRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($createdData -and (Test-Path -LiteralPath $agentData)) {
+    Remove-Item -LiteralPath $agentData -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  foreach ($dir in @($agentSource,$fixture)) {
+    if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+}
