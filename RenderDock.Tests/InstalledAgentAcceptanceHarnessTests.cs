@@ -66,7 +66,8 @@ public sealed class InstalledAgentAcceptanceHarnessTests
             // already runs this xUnit test against the exact PR source head.
             // CI-only proof installs a freshly built canonical SYSTEM Agent
             // with an ephemeral signed test policy; a genuine commercial
-            // credential is DELIBERATELY ABSENT, so real Render Dock must deny.
+            // credential is DELIBERATELY ABSENT, so real Render Dock must
+            // receive the exact missing-credential reason (test exit 86).
             if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
             {
                 var reviewedHead = Environment.GetEnvironmentVariable("SOURCE_SHA");
