@@ -24,14 +24,15 @@ namespace BKE_MediaTools
             ApplicationConfiguration.Initialize();
 
             // Only the Agent's process-bound signed-policy decision can set this.
-            // Normal 1.0.3 retail builds retain their existing legacy paths.
+            // Normal retail builds retain authenticated Air Stack or signed-key licensing,
+            // never an unauthenticated HTTP grace override.
             bool strictAgentGateGranted = false;
 
 #if BKE_STARTUP_GATE_CERTIFICATION
             // PREPRODUCTION ONLY: Agent must authenticate this very Windows
             // process and commit a signed-policy/credential/audit-backed grant
-            // before ANY enterprise, legacy grace, license or application path.
-            // No response, fake pipe, timeout or exception can fall back to grace.
+            // before ANY enterprise, signed-key licensing or application path.
+            // No response, fake pipe, timeout or exception can bypass denial.
             bool agentGranted = false;
             try
             {
@@ -79,41 +80,34 @@ namespace BKE_MediaTools
 
             if (!enterpriseSession && !strictAgentGateGranted)
             {
-                bool graceActive;
-                using (var gracePeriodClient = new GracePeriodClient())
+                // No unsigned global grace response may authorize a product launch.
+                // The shared SDK remains the standalone commercial-key gate.
+                AuthorizationResult authorization;
+                using (var agentClient = new AgentClient())
                 {
-                    graceActive = gracePeriodClient.IsActiveAsync().GetAwaiter().GetResult();
+                    authorization = agentClient.EnsureAuthorizedAsync().GetAwaiter().GetResult();
                 }
 
-                if (!graceActive)
+                if (authorization.Status == AuthorizationStatus.ActivationCancelled)
                 {
-                    AuthorizationResult authorization;
-                    using (var agentClient = new AgentClient())
-                    {
-                        authorization = agentClient.EnsureAuthorizedAsync().GetAwaiter().GetResult();
-                    }
+                    return;
+                }
 
-                    if (authorization.Status == AuthorizationStatus.ActivationCancelled)
-                    {
-                        return;
-                    }
+                if (authorization.Status is AuthorizationStatus.AgentUnavailable or AuthorizationStatus.Timeout)
+                {
+                    AgentRecoveryDialog.ShowRecovery();
+                    return;
+                }
 
-                    if (authorization.Status is AuthorizationStatus.AgentUnavailable or AuthorizationStatus.Timeout)
-                    {
-                        AgentRecoveryDialog.ShowRecovery();
-                        return;
-                    }
-
-                    if (authorization.Status != AuthorizationStatus.Authorized)
-                    {
-                        MessageBox.Show(
-                            "Render Dock could not establish a valid license for this installation. " +
-                            "Use BKE License Center to activate or repair licensing.",
-                            "Render Dock Licensing",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning);
-                        return;
-                    }
+                if (authorization.Status != AuthorizationStatus.Authorized)
+                {
+                    MessageBox.Show(
+                        "Render Dock could not establish a valid license for this installation. " +
+                        "Use BKE License Center to activate or repair licensing.",
+                        "Render Dock Licensing",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
                 }
             }
 
