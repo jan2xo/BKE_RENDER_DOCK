@@ -64,7 +64,7 @@ try {
   }
   New-Item -ItemType Directory -Path $agentData -Force | Out-Null
   $createdData=$true
-  $origin='http://127.0.0.1:43999'
+  $origin='https://127.0.0.1:43999' # strict HTTPS; deliberately no loopback DS listener or credentials
   $config="BKE_ENVIRONMENT=certification" + [Environment]::NewLine +
     "BKE_PLATFORM_BASE_URL=$origin" + [Environment]::NewLine +
     "BKE_STANDALONE_STARTUP_GATE_ENABLED=1" + [Environment]::NewLine
