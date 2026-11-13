@@ -210,7 +210,7 @@ public sealed class PackageContractTests
     }
 
     [Fact]
-    public void StrictPreproductionStartupRequiresAgentBeforeEveryLegacyPath()
+    public void StrictPreproductionStartupRequiresAgentBeforeEnterpriseAndCommercialKeyPaths()
     {
         var program = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
@@ -230,11 +230,10 @@ public sealed class PackageContractTests
 
         var gate = program.IndexOf("AuthorizeConnectedProcessAsync", StringComparison.Ordinal);
         var enterprise = program.IndexOf("TryRedeemAsync", StringComparison.Ordinal);
-        var grace = program.IndexOf("GracePeriodClient", StringComparison.Ordinal);
         var notifications = program.IndexOf("NotificationCoordinator.ShowBeforeLicensing", StringComparison.Ordinal);
         var licensing = program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal);
         var ui = program.IndexOf("Application.Run(mainForm)", StringComparison.Ordinal);
-        Assert.True(gate >= 0 && gate < enterprise && gate < grace &&
+        Assert.True(gate >= 0 && gate < enterprise &&
             gate < notifications && gate < licensing && gate < ui,
             "Preproduction machine-bound verdict must precede all old startup paths.");
         // EnterpriseSessionClient already legitimately owns its separate
@@ -291,17 +290,23 @@ public sealed class PackageContractTests
     }
 
     [Fact]
-    public void ShippingLegacyGraceAndEnterpriseBehaviorAreNotSilentlyRemoved()
+    public void ShippingStartupNeverAcceptsUnsignedLegacyGrace()
     {
         var program = File.ReadAllText(Path.Combine(
             RepositoryRoot, "BKE_RENDER_DOCK", "Program.cs"));
-        Assert.Contains("GracePeriodClient", program);
+        var sources = ProductSources();
+
+        Assert.False(File.Exists(Path.Combine(
+            RepositoryRoot, "BKE_RENDER_DOCK", "Licensing", "GracePeriodClient.cs")));
+        Assert.DoesNotContain("GracePeriodClient", sources, StringComparison.Ordinal);
+        Assert.DoesNotContain("graceActive", sources, StringComparison.Ordinal);
+        Assert.DoesNotContain("/api/graceperiod/renderdock", sources, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("TryRedeemAsync", program);
         Assert.Contains("EnsureAuthorizedAsync", program);
-        Assert.Contains("#endif", program);
         Assert.Contains("if (!enterpriseSession && !strictAgentGateGranted)", program);
-        Assert.True(program.IndexOf("TryRedeemAsync", StringComparison.Ordinal) <
-            program.IndexOf("GracePeriodClient", StringComparison.Ordinal));
+        Assert.True(
+            program.IndexOf("TryRedeemAsync", StringComparison.Ordinal) <
+            program.IndexOf("EnsureAuthorizedAsync", StringComparison.Ordinal));
     }
 
     [Fact]
