@@ -224,8 +224,8 @@ try {
   try {
     $childProcessId=$child.Id
     if (!$child.WaitForExit(25000)) { throw 'Render Dock installed startup timed out.' }
-    if ($child.ExitCode -ne 85) {
-      throw "Expected verified installed Agent explicit denial exit 85, got $($child.ExitCode)."
+    if ($child.ExitCode -ne 86) {
+      throw "Expected signed-install verified Agent missing-credential DENY exit 86, got $($child.ExitCode). Other denials are NOT proof of an intact signed policy."
     }
     $audit=Join-Path $agentRoot 'startup-grant-audit\grants.db'
     if (Test-Path -LiteralPath $audit) {
@@ -238,10 +238,10 @@ try {
       renderdock_source_sha=$ExpectedRenderDockSourceSha;agent_source_sha=$ExpectedAgentSourceSha;
       agent_installer_sha256=$installerHash;renderdock_exe_sha256=$imageSha;
       system_agent=$true;ephemeral_signed_test_issuer=$true;real_commercial_credential=$false;
-      executable_exit_code=85;durable_grant=$false;genuine_ds_issuer='NOT_PROVEN';
+      executable_exit_code=86;durable_grant=$false;genuine_ds_issuer='NOT_PROVEN';
       physical_tpm='NOT_PROVEN';production='LOCKED'}
     $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'bke-renderdock-installed-denial.json') -Encoding utf8
-    Write-Host 'HOSTED_INSTALLED_AGENT_RENDER_DOCK_DENIAL_PASS: real SYSTEM Agent + Render Dock, test-signed policy, missing credential denied, no durable grant.'
+    Write-Host 'HOSTED_INSTALLED_AGENT_RENDER_DOCK_DENIAL_PASS: real SYSTEM Agent + Render Dock, test-signed policy validated, independent credential required, no durable grant.'
   } finally {
     if (!$child.HasExited) { $child.Kill(); $child.WaitForExit() }
     $child.Dispose()
