@@ -1,5 +1,23 @@
 # Render Dock preproduction Agent-grant acceptance and ACCOUNT compatibility
 
+> **Hosted installed-machine negative proof (follow-on PR #34, Nov 13, 2026):**
+> Exact-source Render Dock Windows certification additionally stages the REAL headless
+> `RENDER DOCK.exe` under disposable GitHub-hosted Windows Program Files, builds
+> source-pinned Agent `f594063493ddf39b4acb11a049eb3d4234f42794`,
+> generates an ephemeral public-only **CI test issuer** and signed exact-image
+> `LICENSE_KEY` policy via Agent-certified tooling, then installs the real
+> canonical Agent as a LocalSystem service. **The commercial credential is
+> intentionally absent**: the only acceptable outcome is an explicit denial
+> by SDK-verified installed Agent and *no* durable grant.
+>
+> Distinct NONSHIPPABLE headless exit codes: `84` = Agent absent/untrusted/
+> transport error, `85` = genuine installed Agent responded **DENIED**,
+> `0` = actual audited Agent grant. Exit `85` is not a customer binary behavior,
+> successful authorization, genuine DS issuance, or a substitute for positive
+> human acceptance. The helper operates only on a newly empty, explicitly
+> approved ephemeral Windows GitHub runner and cleans up the service. **Never
+> transfer or upload generated installer or issuer bundle to a customer.**
+>
 > **Current-source policy update (Render Dock PR #33, November 13, 2026):** The unsigned `GracePeriodClient` HTTP `{grace:true}` startup override is retired from both regular and strict build source. Standalone retail startup now requires explicit authorization from the shared licensing SDK; authenticated Air Stack enterprise child-session remains separate. This file's original PR #32 notes below document the **earlier certified state** and must not be treated as a current authorization exception. The real installed-Agent positive grant, complete release provenance and physical TPM acceptance remain **UNPROVEN** until approved independent evidence exists. No public binary/deployment is authorized.
 
 
