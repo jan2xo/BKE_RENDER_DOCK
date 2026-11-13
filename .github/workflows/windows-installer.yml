@@ -140,6 +140,13 @@ jobs:
           if ($project -notmatch 'PackageReference Include="BKE\.Updater" Version="0\.4\.0"') { throw 'BKE Updater 0.4.0 reference missing' }
 
 
+          if ($program -match 'GracePeriodClient|graceActive|/api/graceperiod/renderdock' -or
+              (Test-Path -LiteralPath 'BKE_RENDER_DOCK/Licensing/GracePeriodClient.cs')) {
+            throw 'Unsigned remote grace startup authorization must be retired in all builds'
+          }
+          if ($program -notmatch 'EnsureAuthorizedAsync' -or $program -notmatch 'AuthorizationStatus\.Authorized') {
+            throw 'Standalone licensing enforcement missing'
+          }
           if ($licensing -notmatch 'BkeLicensingClient\.Create|EnsureAuthorizedAsync') { throw 'Canonical shared licensing flow missing' }
           if ($licensing -match 'OpenLicenseCenterAsync|AuthorizeAsync|HttpClient|127\.0\.0\.1:43873|/v1/authorize') { throw 'Product-owned licensing transport/recovery policy must remain absent' }
 
@@ -252,7 +259,7 @@ jobs:
             if ($process.ExitCode -ne 84) {
               throw "FAIL: Render Dock expected Agent-denial exit 84, got $($process.ExitCode)"
             }
-            Write-Host 'PASS: strict Render Dock direct EXE denied absent Agent before enterprise/grace/UI.'
+            Write-Host 'PASS: strict Render Dock direct EXE denied absent Agent before enterprise/commercial-key/UI.'
           }
           finally {
             if (!$process.HasExited) { $process.Kill() }
