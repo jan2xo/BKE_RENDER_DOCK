@@ -17,11 +17,16 @@ on:
         description: Exact installed acceptance EXE SHA256; already bound by signed DS policy
         required: true
         type: string
-      credential_mode:
-        description: Already provisioned and independently proved Agent credential
+      activation_mode:
+        description: Independently reviewed signed DS SQL activation mode on installed policy
         required: true
         type: choice
         options: [ACCOUNT, LICENSE_KEY, EITHER]
+      credential_type:
+        description: Independently verified actual Agent grant credential (EITHER is not a credential)
+        required: true
+        type: choice
+        options: [ACCOUNT, LICENSE_KEY]
 
 permissions:
   contents: read
@@ -53,13 +58,15 @@ jobs:
           PRODUCT_SHA: ${{ inputs.product_source_sha }}
           AGENT_SHA: ${{ inputs.agent_source_sha }}
           PRODUCT_IMAGE_SHA256: ${{ inputs.installed_exe_sha256 }}
-          CREDENTIAL_MODE: ${{ inputs.credential_mode }}
+          SIGNED_ACTIVATION_MODE: ${{ inputs.activation_mode }}
+          CREDENTIAL_TYPE: ${{ inputs.credential_type }}
         run: |
           .\scripts\certification\invoke-installed-agent-startup-acceptance.ps1 `
             -ExpectedRenderDockSourceSha $env:PRODUCT_SHA `
             -ExpectedAgentSourceSha $env:AGENT_SHA `
             -ExpectedExecutableSha256 $env:PRODUCT_IMAGE_SHA256 `
-            -ExpectedCredential $env:CREDENTIAL_MODE `
+            -ExpectedActivationMode $env:SIGNED_ACTIVATION_MODE `
+            -ExpectedCredential $env:CREDENTIAL_TYPE `
             -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'bke-startup-approved-evidence') `
             -ApprovedDisposableMachine
       - name: Upload sanitized read-only acceptance evidence
