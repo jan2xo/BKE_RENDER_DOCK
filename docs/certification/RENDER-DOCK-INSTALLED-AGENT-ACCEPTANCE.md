@@ -121,13 +121,20 @@ dotnet publish 'BKE_RENDER_DOCK/RENDER DOCK.csproj' --configuration Release -r w
    trusted-runtime presence, and an actual SDK startup grant for the launched
    process. It then independently reads the Agent **durable SQLite grant**
    using `py -3` and requires the exact PID + UTC process-start ticks + Windows
-   SID + product + version + executable hash + **ACCOUNT/LICENSE_KEY** record.
+   SID + product + version + executable hash + installed signed
+   **activation mode** (`ACCOUNT`, `LICENSE_KEY`, or `EITHER`) and a separately
+   specified **actual credential** (`ACCOUNT` or `LICENSE_KEY` only).
+   `EITHER` is a canonical DS SQL-selected activation *policy*, not a
+   credential or implied fallback. The script must confirm the installed
+   signed policy's exact activation mode **before launching** the product;
+   the independent SQLite proof must report that exact allowed credential.
 
 ```powershell
 .\scripts\certification\invoke-installed-agent-startup-acceptance.ps1 `
   -ExpectedRenderDockSourceSha '<reviewed-40-char-sha>' `
   -ExpectedAgentSourceSha '<reviewed-Agent-40-char-sha>' `
   -ExpectedExecutableSha256 '<installed-exe-sha256>' `
+  -ExpectedActivationMode 'LICENSE_KEY' `
   -ExpectedCredential 'LICENSE_KEY' `
   -EvidenceDirectory "$env:TEMP\bke-disposable-startup-evidence" `
   -ApprovedDisposableMachine
@@ -148,9 +155,20 @@ positive test. Any headless exit with no matching audit row is **FAIL**.
 | Strict Agent gate denies missing Agent **before all legacy paths** | Real Windows disposable CI PASS on previous wave | No local action needed |
 | `ACCOUNT` grant does **not** invoke commercial-only legacy check | New source/compiled condition test | Real signed ACCOUNT grant required |
 | Headless acceptance cannot compile into normal shipping build | New exact-head Windows test | Not for customer distribution |
-| Read-only grant verifier rejects wrong PID, start time, SID, image, product, version, credential | Disposable Python/SQLite fixtures | Check actual protected Agent ledger |
+| Read-only grant verifier rejects wrong PID, start time, SID, image, product, version, signed policy mode, credential or installation UUID | Disposable Python/SQLite fixtures | Check actual protected Agent ledger and reviewed signed DS policy |
 | Actual `ACCOUNT`/key policy, signed issuer, installed Agent SYSTEM pipe, audit-backed positive process | **NOT COVERED** by hosted Windows missing-Agent run | Run approved isolated Windows procedure above |
 | Physical TPM/EK/AIK, signed GitHub release-to-installer provenance, GUI/customer E2E | **NOT COVERED** | Independent certification/approvals required |
+
+The protected `manual-installed-agent-startup.yml` workflow requires two
+distinct reviewed inputs: `activation_mode` selects the canonical mode
+already signed into the installed DS policy; `credential_type` selects the
+separately proven actual Agent credential. For `ACCOUNT` mode, only an actual
+ACCOUNT grant is valid; for `LICENSE_KEY`, only an actual LICENSE_KEY grant is
+valid; **only explicitly signed `EITHER` permits either independently verified
+credential**. The read-only verifier does not generate, provision, or authenticate
+either underlying credential and cannot establish genuine DS issuer provenance
+on its own. The protected workflow must remain unexecuted until independent
+human/operator trust prerequisites and explicit approval are satisfied.
 
 The read-only verifier must also match the exact canonical `installation_id` in
 the installed signed DS policy payload to the `installation_id` in the
