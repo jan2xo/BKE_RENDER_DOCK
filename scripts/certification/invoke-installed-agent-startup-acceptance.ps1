@@ -33,13 +33,15 @@ $agentRoot = Join-Path $root 'Licensing Agent'
 $exe = Join-Path $productRoot 'RENDER DOCK.exe'
 $marker = Join-Path $productRoot 'bke-startup-acceptance.json'
 $runtime = Join-Path $agentRoot 'runtime/bke-licensing-agent-runtime.exe'
+$serviceExecutable = Join-Path $agentRoot 'service/bke-licensing-agent-service.exe'
 $trust = Join-Path $agentRoot 'trust/account-product-lease-keys/issuers.json'
 $policiesDir = Join-Path $agentRoot 'trust/standalone-startup-policies'
 $ledger = Join-Path $agentRoot 'startup-grant-audit/grants.db'
 $verifier = Join-Path $PSScriptRoot 'verify-installed-agent-startup-grant.py'
 
 foreach ($directory in @($root,$productRoot,$agentRoot,
-  (Join-Path $agentRoot 'runtime'),(Join-Path $agentRoot 'trust'),
+  (Join-Path $agentRoot 'runtime'),(Join-Path $agentRoot 'service'),
+  (Join-Path $agentRoot 'trust'),
   (Join-Path $agentRoot 'trust/account-product-lease-keys'),
   $policiesDir,(Join-Path $agentRoot 'startup-grant-audit'))) {
   if (!(Test-Path -LiteralPath $directory -PathType Container) -or
@@ -47,7 +49,7 @@ foreach ($directory in @($root,$productRoot,$agentRoot,
     throw 'Expected protected installed folder missing or redirected.'
   }
 }
-foreach ($file in @($exe,$marker,$runtime,$trust,$ledger,$verifier)) {
+foreach ($file in @($exe,$marker,$runtime,$serviceExecutable,$trust,$ledger,$verifier)) {
   if (!(Test-Path -LiteralPath $file -PathType Leaf) -or
       ((Get-Item -LiteralPath $file).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
     throw "Expected read-only acceptance input missing or redirected: $file"
@@ -66,10 +68,38 @@ if ($declaration.schema -cne 'bke.renderdock-startup-acceptance-marker.v1' -or
     $declaration.image_sha256 -cne $actual) {
   throw 'Missing exact-byte NONSHIPPABLE acceptance declaration.'
 }
+# Independent operator preflight: the SDK additionally authenticates its
+# named-pipe server's OS identity before and after the connected verdict.
 $service = Get-CimInstance Win32_Service -Filter "Name='BKE-Licensing-Agent'"
 if (!$service -or $service.State -ne 'Running' -or $service.ProcessId -lt 1 -or
-    $service.PathName -notmatch 'bke-licensing-agent-service\.exe') {
-  throw 'Actual installed Agent Windows service must already be running.'
+    $service.StartName -notin @('LocalSystem','NT AUTHORITY\SYSTEM')) {
+  throw 'Actual installed Agent Windows service must run as LocalSystem.'
+}
+# Canonical Inno sc.exe registration contains an absolute EXE path only.
+# Strip optional balanced outer quotes but reject extra arguments or redirects.
+$scmImage = ([string]$service.PathName).Trim()
+if ($scmImage.StartsWith('"') -and $scmImage.EndsWith('"')) {
+  $scmImage = $scmImage.Substring(1,$scmImage.Length-2)
+}
+if (!$scmImage -or $scmImage.Contains('"') -or
+    ![string]::Equals([IO.Path]::GetFullPath($scmImage),
+        [IO.Path]::GetFullPath($serviceExecutable),
+        [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Installed Agent SCM image does not exactly match protected canonical executable.'
+}
+$serviceProcess = @(Get-CimInstance Win32_Process -Filter "ProcessId=$($service.ProcessId)")
+if ($serviceProcess.Count -ne 1 -or !$serviceProcess[0].ExecutablePath -or
+    $serviceProcess[0].SessionId -ne 0 -or
+    ![string]::Equals([IO.Path]::GetFullPath($serviceProcess[0].ExecutablePath),
+        [IO.Path]::GetFullPath($serviceExecutable),
+        [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Actual Agent service process must match SCM and Windows Session 0.'
+}
+$serviceOwner = Invoke-CimMethod -InputObject $serviceProcess[0] -MethodName GetOwner
+if ($serviceOwner.ReturnValue -ne 0 -or
+    $serviceOwner.User -cne 'SYSTEM' -or
+    $serviceOwner.Domain -cne 'NT AUTHORITY') {
+  throw 'Installed Agent service process must have LocalSystem token.'
 }
 $active = @(Get-CimInstance Win32_Process -Filter "Name='bke-licensing-agent-runtime.exe'")
 $trustedProcesses = @($active | Where-Object {
@@ -78,7 +108,20 @@ $trustedProcesses = @($active | Where-Object {
                    [IO.Path]::GetFullPath($runtime),
                    [StringComparison]::OrdinalIgnoreCase)
 })
-if ($trustedProcesses.Count -lt 1) { throw 'No protected installed Agent runtime process.' }
+if ($trustedProcesses.Count -ne 1) {
+  throw 'Exactly one protected installed Agent runtime process is required.'
+}
+$runtimeProcess = $trustedProcesses[0]
+if ($runtimeProcess.SessionId -ne 0 -or
+    $runtimeProcess.ParentProcessId -ne $service.ProcessId) {
+  throw 'Installed Agent runtime must be the Session 0 child of canonical service.'
+}
+$runtimeOwner = Invoke-CimMethod -InputObject $runtimeProcess -MethodName GetOwner
+if ($runtimeOwner.ReturnValue -ne 0 -or
+    $runtimeOwner.User -cne 'SYSTEM' -or
+    $runtimeOwner.Domain -cne 'NT AUTHORITY') {
+  throw 'Installed Agent runtime process must have LocalSystem token.'
+}
 
 # Inspection alone cannot verify the signature. The actual Agent MUST
 # validate signed DS mode/issuer/target before a grant can be returned.
@@ -142,6 +185,9 @@ try {
     product_source_sha=$source
     agent_source_sha_operator_claim=$ExpectedAgentSourceSha
     installed_agent_release_provenance='NOT_PROVEN'
+    installed_agent_service='EXACT_SYSTEM_SESSION0'
+    installed_agent_runtime='EXACT_SYSTEM_CHILD_SESSION0'
+    genuine_ds_issuer_origin='NOT_INDEPENDENTLY_PROVEN'
     physical_tpm_provenance='NOT_PROVEN'
     signed_policy='AGENT_VALIDATED'
     credential=$grant.credential

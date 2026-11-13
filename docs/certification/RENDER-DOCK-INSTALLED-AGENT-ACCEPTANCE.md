@@ -43,6 +43,23 @@
 **Business decision deferred:** legacy `{grace:true}` and Air Stack policy remain in normal release. Strict mode treats both as *not authority*. No production release, deployment, catalog activation, payments, email or forced push.
 
 
+> **Manual positive preflight hardening (follow-on PR #35, November 13, 2026):**
+> The read-only approved-machine script now refuses to launch the
+> NONSHIPPABLE Render Dock acceptance executable unless the SCM service is
+> `Running` under `LocalSystem`, its executable is exactly the installed
+> `service/bke-licensing-agent-service.exe` (no extra arguments), and its
+> Windows process has the same canonical path, Session 0 and SYSTEM owner.
+> It also requires exactly one `runtime/bke-licensing-agent-runtime.exe`
+> running as SYSTEM in Session 0 with the canonical service process as parent.
+> It still requires the pinned exact product executable hash, operator
+> approval, signed-policy file, real SDK decision and an independently read
+> exact-process durable grant. These observations **do not** establish real
+> DS issuer provenance: the report explicitly marks it unproven, as it does
+> installed Agent release provenance and physical TPM. The executable is not
+> started when any preflight fails. The manual workflow still requires
+> independently approved runner and genuine nonproduction DS signer/credential
+> provisioned by authorized operators; it MUST NOT be invoked by normal CI.
+
 ## Human/approved disposable Windows acceptance — not executed by normal CI
 
 **Do not run on a customer/productive machine.** This procedure requires an

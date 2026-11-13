@@ -290,6 +290,53 @@ public sealed class PackageContractTests
     }
 
     [Fact]
+    public void HumanPositiveAcceptanceMustVerifyExactSystemAgentProcessAncestryBeforeLaunch()
+    {
+        // This statically guards the read-only manual-only trust proof.
+        // Real enrolled DS credentials/issuer and a protected installed
+        // Windows machine remain necessary for the separate positive gate.
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot,
+            "scripts", "certification",
+            "invoke-installed-agent-startup-acceptance.ps1"));
+
+        var required = new[] {
+            "$service.StartName",
+            "LocalSystem",
+            "$serviceExecutable",
+            "[IO.Path]::GetFullPath($scmImage)",
+            "$serviceProcess[0].SessionId -ne 0",
+            "$serviceOwner.User -cne 'SYSTEM'",
+            "$runtimeProcess.ParentProcessId -ne $service.ProcessId",
+            "$runtimeProcess.SessionId -ne 0",
+            "$runtimeOwner.User -cne 'SYSTEM'",
+            "$trustedProcesses.Count -ne 1",
+            "ExpectedExecutableSha256",
+            "ApprovedDisposableMachine",
+            "agent_source_sha_operator_claim",
+            "genuine_ds_issuer_origin='NOT_INDEPENDENTLY_PROVEN'",
+            "--started-ticks",
+            "--sid",
+            "durable_ledger"
+        };
+        foreach (var token in required)
+            Assert.Contains(token, source, StringComparison.Ordinal);
+
+        var firstCimCheck = source.IndexOf(
+            "$service = Get-CimInstance Win32_Service", StringComparison.Ordinal);
+        var ownerCheck = source.IndexOf(
+            "$runtimeOwner.User -cne 'SYSTEM'", StringComparison.Ordinal);
+        var startup = source.IndexOf(
+            "$app = Start-Process -FilePath $exe", StringComparison.Ordinal);
+        Assert.True(firstCimCheck >= 0 && ownerCheck > firstCimCheck &&
+            startup > ownerCheck,
+            "Manual acceptance cannot launch product until SCM, LocalSystem, " +
+            "native process ancestry and protection have been checked.");
+        Assert.DoesNotContain("Stop-Service", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Start-Service", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("& sc.exe", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ShippingStartupNeverAcceptsUnsignedLegacyGrace()
     {
         var program = File.ReadAllText(Path.Combine(
