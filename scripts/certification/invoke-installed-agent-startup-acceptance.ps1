@@ -125,6 +125,9 @@ if ($runtimeOwner.ReturnValue -ne 0 -or
 
 # Inspection alone cannot verify the signature. The actual Agent MUST
 # validate signed DS mode/issuer/target before a grant can be returned.
+# Correlate the signed payload's scoped installation/user to the independent
+# protected Agent audit, not merely to the executable's visible hash.
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $matchingPolicies = @()
 foreach ($policy in @(Get-ChildItem -LiteralPath $policiesDir -Filter '*.json' -File)) {
   if ($policy.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
@@ -134,14 +137,19 @@ foreach ($policy in @(Get-ChildItem -LiteralPath $policiesDir -Filter '*.json' -
     if ($signed.product_id -ceq 'bke-render-dock' -and
         $signed.version -ceq '1.0.3' -and
         $signed.image_sha256 -ceq $actual -and
+        $signed.allowed_user_sid -ceq $sid -and
         [string]::Equals($signed.image_path,$exe,[StringComparison]::OrdinalIgnoreCase)) {
-      $matchingPolicies += $policy.FullName
+      $matchingPolicies += $signed
     }
   } catch {
     throw 'Malformed installed DS startup policy; do not rewrite policy during acceptance.'
   }
 }
 if ($matchingPolicies.Count -ne 1) { throw 'Exactly one matching installed DS signed policy is required.' }
+$expectedInstallationId = [string]$matchingPolicies[0].installation_id
+if ($expectedInstallationId -cnotmatch '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') {
+  throw 'Installed DS signed policy has no canonical installation ID.'
+}
 if (!(Get-Command py -ErrorAction SilentlyContinue)) {
   throw 'Python 3 Windows launcher is required to read Agent grant SQLite without mutation.'
 }
@@ -149,7 +157,6 @@ $pythonVersion = & py -3 --version
 if ($LASTEXITCODE -ne 0 -or "$pythonVersion" -notmatch '^Python 3\.') {
   throw 'Python 3 not available.'
 }
-$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $reportRoot = [IO.Path]::GetFullPath($EvidenceDirectory)
 if ($reportRoot.StartsWith($root + [IO.Path]::DirectorySeparatorChar,
                           [StringComparison]::OrdinalIgnoreCase)) {
@@ -168,6 +175,7 @@ try {
     '-3','-B',$verifier,'--db',$ledger,'--pid',[string]$processId,
     '--started-ticks',[string]$startedTicks,'--sid',$sid,
     '--sha256',$actual,'--product','bke-render-dock','--version','1.0.3',
+    '--installation-id',$expectedInstallationId,
     '--expected-credential',$ExpectedCredential
   )
   $raw = & py @pythonArgs
@@ -190,6 +198,7 @@ try {
     genuine_ds_issuer_origin='NOT_INDEPENDENTLY_PROVEN'
     physical_tpm_provenance='NOT_PROVEN'
     signed_policy='AGENT_VALIDATED'
+    installation_binding='SIGNED_POLICY_EQUALS_AGENT_GRANT'
     credential=$grant.credential
     exact_exe_sha256=$actual
     durable_grant=$grant.durable_ledger

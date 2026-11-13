@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ def main():
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--product", required=True)
     parser.add_argument("--version", required=True)
+    parser.add_argument("--installation-id", required=True)
     parser.add_argument("--expected-credential",
                         choices=["ACCOUNT", "LICENSE_KEY", "EITHER"],
                         required=True)
@@ -30,7 +32,9 @@ def main():
             not args.sid.startswith("S-1-") or
             len(args.sha256) != 64 or
             any(c not in "0123456789abcdef" for c in args.sha256) or
-            not args.product or not args.version):
+            not args.product or not args.version or
+            not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}",
+                             args.installation_id)):
         raise RuntimeError("Refusing invalid or non-Windows startup grant proof")
     db_path = Path(args.db)
     if not db_path.is_file():
@@ -54,8 +58,9 @@ def main():
             digest != args.sha256 or credential not in ("ACCOUNT", "LICENSE_KEY") or
             (args.expected_credential != "EITHER" and
              credential != args.expected_credential) or
-            not isinstance(installation, str) or not installation):
-        raise RuntimeError("Agent grant mismatches installed binary, product or credential")
+            not isinstance(installation, str) or
+            installation != args.installation_id):
+        raise RuntimeError("Agent grant mismatches signed installation, binary, product or credential")
     # Never print raw SID, machine ID, installation ID, or user profile paths.
     print(json.dumps({
         "status": "PASS", "product": product, "version": version,

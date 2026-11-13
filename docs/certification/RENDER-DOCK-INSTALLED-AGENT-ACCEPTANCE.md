@@ -152,6 +152,16 @@ positive test. Any headless exit with no matching audit row is **FAIL**.
 | Actual `ACCOUNT`/key policy, signed issuer, installed Agent SYSTEM pipe, audit-backed positive process | **NOT COVERED** by hosted Windows missing-Agent run | Run approved isolated Windows procedure above |
 | Physical TPM/EK/AIK, signed GitHub release-to-installer provenance, GUI/customer E2E | **NOT COVERED** | Independent certification/approvals required |
 
+The read-only verifier must also match the exact canonical `installation_id` in
+the installed signed DS policy payload to the `installation_id` in the
+Agent-owned durable SQLite grant for that same PID, UTC start, Windows SID and
+image hash. A present but different installation UUID is **FAIL**, not a
+positive grant. The policy payload is only an operator correlation input:
+the actual installed Agent still owns cryptographic verification, and this
+check does **not** establish independent DS signer custody, authenticity
+of operator provisioning, or GitHub release-to-installed Agent provenance.
+The installation UUID must not be written into public evidence.
+
 `ExpectedAgentSourceSha` in the human-run report is an **operator-declared
 source pin**, not cryptographically verified GitHub-release-to-installed-binary
 provenance. Never promote it to a publisher/signature claim.
