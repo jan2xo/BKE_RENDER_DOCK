@@ -53,6 +53,35 @@ public sealed class InstalledAgentAcceptanceHarnessTests
             }, TimeSpan.FromMinutes(2));
             Assert.NotEqual(0, illegal.ExitCode);
             Assert.Contains("NONSHIPPABLE strict preproduction", illegal.Output + illegal.Error);
+
+            // This EXTRA integration proof is never run on a developer or
+            // customer machine. The trusted main Windows x64 certification
+            // already runs this xUnit test against the exact PR source head.
+            // CI-only proof installs a freshly built canonical SYSTEM Agent
+            // with an ephemeral signed test policy; a genuine commercial
+            // credential is DELIBERATELY ABSENT, so real Render Dock must deny.
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+            {
+                var reviewedHead = Environment.GetEnvironmentVariable("SOURCE_SHA");
+                Assert.Matches("^[a-f0-9]{40}$", reviewedHead ?? "");
+                var script = Path.Combine(RepoRoot, "scripts", "certification",
+                    "invoke-hosted-installed-agent-denial.ps1");
+                Assert.True(File.Exists(script), "Hosted installed Agent test script missing");
+                const string agentSource = "f594063493ddf39b4acb11a049eb3d4234f42794";
+                var installed = await RunAsync("pwsh", new[] {
+                    "-NoProfile", "-NonInteractive", "-File", script,
+                    "-ExpectedRenderDockSourceSha", reviewedHead!,
+                    "-ExpectedAgentSourceSha", agentSource,
+                    "-AcceptanceBuildDirectory", folder,
+                    "-ApprovedDisposableWindowsRunner"
+                }, TimeSpan.FromMinutes(28));
+                Assert.True(installed.ExitCode == 0,
+                    "Real installed SYSTEM Agent / Render Dock denial test failed: " +
+                    installed.Error + Environment.NewLine +
+                    installed.Output[^Math.Min(installed.Output.Length, 5000)..]);
+                Assert.Contains("HOSTED_INSTALLED_AGENT_RENDER_DOCK_DENIAL_PASS",
+                    installed.Output);
+            }
         }
         finally
         {
