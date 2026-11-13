@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if (!$ApprovedDisposableWindowsRunner -or $env:GITHUB_ACTIONS -cne 'true' -or
+    $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
     $env:RUNNER_OS -cne 'Windows' -or !$IsWindows -or
     ![Environment]::Is64BitOperatingSystem -or !$env:RUNNER_TEMP) {
   throw 'Only explicitly approved disposable Windows x64 GitHub Actions.'
