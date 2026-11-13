@@ -5,7 +5,8 @@ param(
   [Parameter(Mandatory)][string]$ExpectedRenderDockSourceSha,
   [Parameter(Mandatory)][string]$ExpectedAgentSourceSha,
   [Parameter(Mandatory)][string]$ExpectedExecutableSha256,
-  [Parameter(Mandatory)][ValidateSet('ACCOUNT','LICENSE_KEY','EITHER')][string]$ExpectedCredential,
+  [Parameter(Mandatory)][ValidateSet('ACCOUNT','LICENSE_KEY','EITHER')][string]$ExpectedActivationMode,
+  [Parameter(Mandatory)][ValidateSet('ACCOUNT','LICENSE_KEY')][string]$ExpectedCredential,
   [Parameter(Mandatory)][string]$EvidenceDirectory,
   [switch]$ApprovedDisposableMachine
 )
@@ -17,6 +18,11 @@ foreach ($sha in @($ExpectedRenderDockSourceSha, $ExpectedAgentSourceSha)) {
   if ($sha -cnotmatch '^[a-f0-9]{40}$') { throw 'Must provide immutable source SHAs.' }
 }
 if ($ExpectedExecutableSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Must provide SHA256 of exact executable.' }
+# The signed DS policy controls mode; EITHER is not a third credential.
+if ($ExpectedActivationMode -cne 'EITHER' -and
+    $ExpectedActivationMode -cne $ExpectedCredential) {
+  throw 'Selected credential is incompatible with required signed activation mode.'
+}
 $operator = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (!$operator.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   throw 'Protected Agent grant audit must be inspected by approved Administrator.'
@@ -136,6 +142,7 @@ foreach ($policy in @(Get-ChildItem -LiteralPath $policiesDir -Filter '*.json' -
     $signed = $envelope.payload | ConvertFrom-Json
     if ($signed.product_id -ceq 'bke-render-dock' -and
         $signed.version -ceq '1.0.3' -and
+        $signed.activation_mode -ceq $ExpectedActivationMode -and
         $signed.image_sha256 -ceq $actual -and
         $signed.allowed_user_sid -ceq $sid -and
         [string]::Equals($signed.image_path,$exe,[StringComparison]::OrdinalIgnoreCase)) {
@@ -176,6 +183,7 @@ try {
     '--started-ticks',[string]$startedTicks,'--sid',$sid,
     '--sha256',$actual,'--product','bke-render-dock','--version','1.0.3',
     '--installation-id',$expectedInstallationId,
+    '--signed-activation-mode',$ExpectedActivationMode,
     '--expected-credential',$ExpectedCredential
   )
   $raw = & py @pythonArgs
@@ -199,6 +207,7 @@ try {
     physical_tpm_provenance='NOT_PROVEN'
     signed_policy='AGENT_VALIDATED'
     installation_binding='SIGNED_POLICY_EQUALS_AGENT_GRANT'
+    signed_activation_mode=$ExpectedActivationMode
     credential=$grant.credential
     exact_exe_sha256=$actual
     durable_grant=$grant.durable_ledger
