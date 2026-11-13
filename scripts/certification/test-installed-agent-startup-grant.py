@@ -70,10 +70,14 @@ def main():
         run(replace("--db",str(Path(temp)/"missing.db")), False, "no durable Agent ledger")
         # A real durable row with the right PID/SID/image but the wrong
         # installation must NEVER be counted as the signed installation.
-        with sqlite3.connect(db) as connection:
+        connection = sqlite3.connect(db)
+        try:
             connection.execute(
                 "UPDATE startup_grants SET installation_id = ?",
                 ("00000000-0000-0000-0000-000000000002",))
+            connection.commit()
+        finally:
+            connection.close()
         run(base, False, "wrong installation ID inside protected grant row")
         print("Read-only installed-Agent audit verifier disposable fixtures: 12/12 PASS")
 
