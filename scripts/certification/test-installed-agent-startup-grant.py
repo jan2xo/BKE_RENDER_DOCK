@@ -39,6 +39,7 @@ def main():
             "--sha256", "a"*64, "--product", "bke-render-dock",
             "--version", "1.0.3",
             "--installation-id", "00000000-0000-0000-0000-000000000001",
+            "--signed-activation-mode", "LICENSE_KEY",
             "--expected-credential", "LICENSE_KEY"
         ]
         def run(args, should_pass, name):
@@ -50,8 +51,8 @@ def main():
             elif result.returncode == 0:
                 raise RuntimeError("FAIL "+name+": verifier incorrectly accepted mismatch")
             print("PASS fixture: "+name)
-        def replace(option, value):
-            copy = list(base)
+        def replace(option, value, args=base):
+            copy = list(args)
             i = copy.index(option)
             copy[i+1] = value
             return copy
@@ -65,9 +66,18 @@ def main():
         run(replace("--installation-id",
                     "00000000-0000-0000-0000-000000000002"),
             False, "different signed-policy installation ID")
-        run(replace("--expected-credential","ACCOUNT"), False, "no commercial-to-account substitution")
-        run(replace("--expected-credential","EITHER"), True, "explicit EITHER accepts independently proved key")
-        run(replace("--db",str(Path(temp)/"missing.db")), False, "no durable Agent ledger")
+        run(replace("--expected-credential","ACCOUNT"), False,
+            "key grant cannot claim account credential")
+        run(replace("--signed-activation-mode","ACCOUNT"), False,
+            "signed ACCOUNT mode cannot authorize key grant")
+        run(replace("--signed-activation-mode","EITHER"), True,
+            "only signed EITHER can authorize an independently proved key grant")
+        run(replace("--expected-credential","EITHER"), False,
+            "EITHER is not a credential")
+        run(replace("--signed-activation-mode","AUTO"), False,
+            "unsigned or unknown activation mode is denied")
+        run(replace("--db",str(Path(temp)/"missing.db")), False,
+            "no durable Agent ledger")
         # A real durable row with the right PID/SID/image but the wrong
         # installation must NEVER be counted as the signed installation.
         connection = sqlite3.connect(db)
@@ -79,7 +89,27 @@ def main():
         finally:
             connection.close()
         run(base, False, "wrong installation ID inside protected grant row")
-        print("Read-only installed-Agent audit verifier disposable fixtures: 12/12 PASS")
+
+        # The same protected process row may carry an actual ACCOUNT grant.
+        # Credential identity and canonical DS mode must be checked separately.
+        connection = sqlite3.connect(db)
+        try:
+            connection.execute(
+                "UPDATE startup_grants SET installation_id = ?, credential = ?",
+                ("00000000-0000-0000-0000-000000000001", "ACCOUNT"))
+            connection.commit()
+        finally:
+            connection.close()
+        account = replace("--expected-credential", "ACCOUNT")
+        run(replace("--signed-activation-mode","ACCOUNT",account), True,
+            "signed ACCOUNT accepts independent account credential")
+        run(replace("--signed-activation-mode","EITHER",account), True,
+            "signed EITHER accepts independent account credential")
+        run(account, False, "signed LICENSE_KEY denies account credential")
+        run(replace("--signed-activation-mode","EITHER"), False,
+            "EITHER policy does not permit claiming a key credential from account")
+        run(base, False, "account grant cannot be mislabeled key credential")
+        print("Read-only installed-Agent audit verifier disposable fixtures: 20/20 PASS")
 
 if __name__ == "__main__":
     main()

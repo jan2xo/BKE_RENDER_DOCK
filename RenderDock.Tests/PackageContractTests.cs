@@ -337,6 +337,36 @@ public sealed class PackageContractTests
     }
 
     [Fact]
+    public void HumanPositiveProofMustBindSignedModeToActualCredentialBeforeLaunch()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot,
+            "scripts", "certification",
+            "invoke-installed-agent-startup-acceptance.ps1"));
+        var verifier = File.ReadAllText(Path.Combine(RepositoryRoot,
+            "scripts", "certification", "verify-installed-agent-startup-grant.py"));
+        var workflow = File.ReadAllText(Path.Combine(RepositoryRoot,
+            ".github", "workflows", "manual-installed-agent-startup.yml"));
+
+        Assert.Contains("$signed.activation_mode -ceq $ExpectedActivationMode", script);
+        Assert.Contains("$ExpectedActivationMode -cne $ExpectedCredential", script);
+        Assert.Contains("'--signed-activation-mode',$ExpectedActivationMode", script);
+        Assert.Contains("signed_activation_mode=$ExpectedActivationMode", script);
+        Assert.Contains("credential != args.expected_credential", verifier);
+        Assert.Contains("args.signed_activation_mode != \"EITHER\"", verifier);
+        Assert.Contains("choices=[\"ACCOUNT\", \"LICENSE_KEY\"]", verifier);
+        Assert.Contains("activation_mode:", workflow);
+        Assert.Contains("credential_type:", workflow);
+        Assert.DoesNotContain("credential_mode:", workflow, StringComparison.Ordinal);
+
+        var modeCheck = script.IndexOf(
+            "$signed.activation_mode -ceq $ExpectedActivationMode", StringComparison.Ordinal);
+        var startup = script.IndexOf("$app = Start-Process -FilePath $exe",
+            StringComparison.Ordinal);
+        Assert.True(modeCheck >= 0 && startup > modeCheck,
+            "Human positive proof must check DS-signed activation mode before launching.");
+    }
+
+    [Fact]
     public void ShippingStartupNeverAcceptsUnsignedLegacyGrace()
     {
         var program = File.ReadAllText(Path.Combine(

@@ -23,8 +23,12 @@ def main():
     parser.add_argument("--product", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--installation-id", required=True)
-    parser.add_argument("--expected-credential",
+    parser.add_argument("--signed-activation-mode",
                         choices=["ACCOUNT", "LICENSE_KEY", "EITHER"],
+                        required=True)
+    # EITHER is a signed DS activation mode, never an actual credential.
+    parser.add_argument("--expected-credential",
+                        choices=["ACCOUNT", "LICENSE_KEY"],
                         required=True)
     args = parser.parse_args()
     if (not sys.platform.startswith("win") or args.pid < 1 or
@@ -56,11 +60,14 @@ def main():
     pid, ticks, sid, product, version, installation, digest, credential, granted = rows[0]
     if (product != args.product or version != args.version or
             digest != args.sha256 or credential not in ("ACCOUNT", "LICENSE_KEY") or
-            (args.expected_credential != "EITHER" and
-             credential != args.expected_credential) or
+            credential != args.expected_credential or
+            (args.signed_activation_mode != "EITHER" and
+             credential != args.signed_activation_mode) or
             not isinstance(installation, str) or
             installation != args.installation_id):
-        raise RuntimeError("Agent grant mismatches signed installation, binary, product or credential")
+        raise RuntimeError(
+            "Agent grant mismatches signed installation, activation mode, "
+            "binary, product or independently selected credential")
     # Never print raw SID, machine ID, installation ID, or user profile paths.
     print(json.dumps({
         "status": "PASS", "product": product, "version": version,

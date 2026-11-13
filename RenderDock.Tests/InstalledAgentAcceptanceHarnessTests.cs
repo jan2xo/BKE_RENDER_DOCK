@@ -126,6 +126,7 @@ public sealed class InstalledAgentAcceptanceHarnessTests
             "-ExpectedRenderDockSourceSha", new string('a', 40),
             "-ExpectedAgentSourceSha", new string('b', 40),
             "-ExpectedExecutableSha256", new string('c', 64),
+            "-ExpectedActivationMode", "LICENSE_KEY",
             "-ExpectedCredential", "LICENSE_KEY",
             "-EvidenceDirectory", Path.GetTempPath()
         }, TimeSpan.FromSeconds(20));
@@ -144,7 +145,7 @@ public sealed class InstalledAgentAcceptanceHarnessTests
         var result = await RunAsync("py", ["-3", script],
             TimeSpan.FromSeconds(30));
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("12/12 PASS", result.Output);
+        Assert.Contains("20/20 PASS", result.Output);
     }
 
     private static async Task<(int ExitCode, string Output, string Error)> RunAsync(
