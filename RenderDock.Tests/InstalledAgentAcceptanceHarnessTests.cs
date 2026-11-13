@@ -144,7 +144,7 @@ public sealed class InstalledAgentAcceptanceHarnessTests
         var result = await RunAsync("py", ["-3", script],
             TimeSpan.FromSeconds(30));
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("10/10 PASS", result.Output);
+        Assert.Contains("12/12 PASS", result.Output);
     }
 
     private static async Task<(int ExitCode, string Output, string Error)> RunAsync(
