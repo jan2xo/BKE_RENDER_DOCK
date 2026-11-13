@@ -61,7 +61,7 @@ namespace BKE_MediaTools
                 Environment.ExitCode =
                     agentDecision?.Status != StandaloneStartupGateStatus.Denied
                         ? 84
-                        : agentDecision.Reason == "independent_credential_required"
+                        : agentDecision?.Reason == "independent_credential_required"
                             ? 86
                             : 85;
 #else
