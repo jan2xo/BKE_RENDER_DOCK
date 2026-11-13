@@ -37,7 +37,9 @@ def main():
             "--pid", "31415", "--started-ticks", "638986123456789012",
             "--sid", "S-1-5-21-111-222-333-1001",
             "--sha256", "a"*64, "--product", "bke-render-dock",
-            "--version", "1.0.3", "--expected-credential", "LICENSE_KEY"
+            "--version", "1.0.3",
+            "--installation-id", "00000000-0000-0000-0000-000000000001",
+            "--expected-credential", "LICENSE_KEY"
         ]
         def run(args, should_pass, name):
             result = subprocess.run(args, capture_output=True, text=True,
@@ -60,10 +62,20 @@ def main():
         run(replace("--sha256","b"*64), False, "different installed EXE hash")
         run(replace("--product","other-product"), False, "different product")
         run(replace("--version","1.0.4"), False, "different version")
+        run(replace("--installation-id",
+                    "00000000-0000-0000-0000-000000000002"),
+            False, "different signed-policy installation ID")
         run(replace("--expected-credential","ACCOUNT"), False, "no commercial-to-account substitution")
         run(replace("--expected-credential","EITHER"), True, "explicit EITHER accepts independently proved key")
         run(replace("--db",str(Path(temp)/"missing.db")), False, "no durable Agent ledger")
-        print("Read-only installed-Agent audit verifier disposable fixtures: 10/10 PASS")
+        # A real durable row with the right PID/SID/image but the wrong
+        # installation must NEVER be counted as the signed installation.
+        with sqlite3.connect(db) as connection:
+            connection.execute(
+                "UPDATE startup_grants SET installation_id = ?",
+                ("00000000-0000-0000-0000-000000000002",))
+        run(base, False, "wrong installation ID inside protected grant row")
+        print("Read-only installed-Agent audit verifier disposable fixtures: 12/12 PASS")
 
 if __name__ == "__main__":
     main()
