@@ -42,13 +42,13 @@ WHAT I GET
 
 The SDK owns the standard authorization / Agent-owned activation choreography. Render Dock fails closed when authorization is not granted.
 
-The existing operational grace check remains a separate legacy product integration in this release and is intentionally **not** retired by this source change. Air Stack enterprise redemption remains unchanged in the normal shipping build. Neither grace HTTP nor enterprise redemption constitutes the new process-bound Agent startup proof.
+The old unauthenticated global HTTP `grace:true` startup override is **removed from the source**, including the `GracePeriodClient` implementation. Standalone retail startup now requires the canonical BKE licensing SDK to return explicit authorization; invalid, unavailable or cancelled authorization does not open the application. The separately Agent-authenticated Air Stack enterprise child-session remains unchanged. Air Stack redemption is not a substitute for standalone Agent process-bound startup proof.
 
 ### Strict Agent-bound startup — PREPRODUCTION ONLY
 
-A separate, **nonshippable** Render Dock certification build sets `BkeStartupGateCertification=true` at compile time. That build asks `BkeStandaloneStartupGateClient` **before** attempting enterprise redemption, the legacy grace endpoint, notifications, commercial key activation, FFmpeg or application UI. The SDK uses the Agent's Windows named pipe `bke.standalone-startup.v1`; it rejects a spoofed local server by checking the OS-observed process, its installed protected runtime path and SYSTEM identity. The product never transmits a PID, product ID, user SID, key, activation mode or executable path as authority.
+A separate, **nonshippable** Render Dock certification build sets `BkeStartupGateCertification=true` at compile time. That build asks `BkeStandaloneStartupGateClient` **before** attempting enterprise redemption, notifications, commercial key activation, FFmpeg or application UI. The SDK uses the Agent's Windows named pipe `bke.standalone-startup.v1`; it rejects a spoofed local server by checking the OS-observed process, its installed protected runtime path and SYSTEM identity. The product never transmits a PID, product ID, user SID, key, activation mode or executable path as authority.
 
-When the Agent or signed installed policy is absent, invalid, unreachable, or denies, the preproduction executable **exits with code 84** without entering the UI and without falling back to grace or enterprise. Ordinary 1.0.3 packaging has this conditional feature disabled and intentionally retains its existing behavior. **This is source-only/negative acceptance**, not a validated installed-Agent success or production anti-bypass claim. A genuine installed DS signed activation policy, real Agent runtime composition, enterprise-mode policy reconciliation, and signed release/install provenance remain separate certification gates. Do not publish the strict certification variant to customers.
+When the Agent or signed installed policy is absent, invalid, unreachable, or denies, the preproduction executable **exits with code 84** without entering the UI and without falling back to enterprise or key-only paths. Ordinary 1.0.3 packaging still has this conditional **process-bound** feature disabled, but no longer contains the unsigned legacy grace bypass: authenticated Air Stack redemption or the canonical signed-key SDK is required. **This is source-only/negative acceptance**, not a validated installed-Agent success or production anti-bypass claim. A genuine installed DS signed activation policy, real Agent runtime composition, enterprise-mode policy reconciliation, and signed release/install provenance remain separate certification gates. Do not publish the strict certification variant to customers.
 
 This product consumes the SDK built from exact merged source `e34431f5400aab00e87549b8aae8dedc3104f4bb` (unreleased 2.0.2); the Agent Host process trust contract is pinned to source `1bf1a6f7048918f6a19265f94f687d750bb01931` for this verification. Production is locked.
 
@@ -81,11 +81,11 @@ For `UpdateAvailable`, Render Dock currently shows informational product UI only
 - **Output root:** `D:\BKE_RENDER_DOCK` with fallback to `C:\BKE_RENDER_DOCK`
 - **On-demand Admin (UAC):** if Windows blocks folder creation, the app may relaunch as Administrator for that product operation
 - **Double-click to open output:** double-click the app window to open the most recent output folder
-- **Authorization:** operational grace first; otherwise the canonical BKE licensing SDK capability
+- **Authorization:** Agent-authenticated Air Stack child-session or the canonical BKE licensing SDK capability; no unsigned grace override
 - **Enterprise launch:** Air Stack child-session redemption remains Agent-authenticated named-pipe IPC
 - **Notifications:** Agent-backed startup inbox + in-product notification tray; product has no publication authority
 - **Update discovery:** canonical BKE updater SDK capability; no product-local updater transport
-- **Fail closed licensing:** protected startup proceeds only after grace, redeemed enterprise session, or explicit Agent authorization
+- **Fail closed licensing:** protected startup requires authenticated Air Stack enterprise redemption, a strict signed Agent process grant (preproduction-only), or explicit BKE licensing SDK authorization
 
 ## Requirements
 
