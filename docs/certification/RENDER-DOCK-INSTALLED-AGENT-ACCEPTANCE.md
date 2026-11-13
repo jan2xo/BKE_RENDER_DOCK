@@ -1,5 +1,9 @@
 # Render Dock preproduction Agent-grant acceptance and ACCOUNT compatibility
 
+> **Current-source policy update (Render Dock PR #33, November 13, 2026):** The unsigned `GracePeriodClient` HTTP `{grace:true}` startup override is retired from both regular and strict build source. Standalone retail startup now requires explicit authorization from the shared licensing SDK; authenticated Air Stack enterprise child-session remains separate. This file's original PR #32 notes below document the **earlier certified state** and must not be treated as a current authorization exception. The real installed-Agent positive grant, complete release provenance and physical TPM acceptance remain **UNPROVEN** until approved independent evidence exists. No public binary/deployment is authorized.
+
+
+
 **Current certification intent:** finish Render Dock's **Agent-authoritative startup consumption** without shipping a new retail policy. The source-only gate currently approves a signed-policy/machine/credential decision but then re-runs the legacy commercial-key-only flow. That can block legitimate `ACCOUNT` startup after a valid Agent grant. Resolve this **inside Render Dock**, without weakening the Agent or the cloud.
 
 **Immutable bases:** Render Dock `2e9f573ee901a56fc7f5cc824ff0e1f613b99a94`; shared BKE SDK `e34431f5400aab00e87549b8aae8dedc3104f4bb` (source-built `BKE.Desktop.Licensing 2.0.2`), Licensing Agent `1bf1a6f7048918f6a19265f94f687d750bb01931`, Digital Solutions `9464d6814eb9606b0b2578daa29038c000ed7abc`.
@@ -103,7 +107,7 @@ positive test. Any headless exit with no matching audit row is **FAIL**.
 
 | Gate | Automated | Human/installed |
 |---|---|---|
-| Standard retail grace and Air Stack remain unchanged | Source contract | Business-policy decision still open |
+| Unsigned retail grace retired by follow-on PR #33; Air Stack remains separate | Follow-on source + Windows proof required | No production cutover |
 | Strict Agent gate denies missing Agent **before all legacy paths** | Real Windows disposable CI PASS on previous wave | No local action needed |
 | `ACCOUNT` grant does **not** invoke commercial-only legacy check | New source/compiled condition test | Real signed ACCOUNT grant required |
 | Headless acceptance cannot compile into normal shipping build | New exact-head Windows test | Not for customer distribution |
