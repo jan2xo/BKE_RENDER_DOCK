@@ -24,7 +24,14 @@ public sealed class InstalledAgentAcceptanceHarnessTests
         Assert.False(Directory.Exists(agentPath),
             "Disposable hosted Windows runner unexpectedly has an installed Agent; refuse negative proof.");
 
-        var folder = Path.Combine(Path.GetTempPath(),
+        // CI's guarded disposable installation may consume ONLY RUNNER_TEMP.
+        // Path.GetTempPath() on hosted Windows can point to a different volume.
+        var testTemporaryRoot =
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"
+                ? Environment.GetEnvironmentVariable("RUNNER_TEMP") ??
+                    throw new InvalidOperationException("GitHub RUNNER_TEMP missing")
+                : Path.GetTempPath();
+        var folder = Path.Combine(testTemporaryRoot,
             "bke-renderdock-acceptance-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
