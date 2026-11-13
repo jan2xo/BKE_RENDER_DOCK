@@ -90,6 +90,24 @@ public sealed class InstalledAgentAcceptanceHarnessTests
     }
 
     [Fact]
+    public async Task HostedInstalledAgentHarnessCannotRunWithoutDisposableApproval()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var script = Path.Combine(RepoRoot, "scripts", "certification",
+            "invoke-hosted-installed-agent-denial.ps1");
+        Assert.True(File.Exists(script));
+        var result = await RunAsync("pwsh", new[] {
+            "-NoProfile", "-NonInteractive", "-File", script,
+            "-ExpectedRenderDockSourceSha", new string('a', 40),
+            "-ExpectedAgentSourceSha", new string('b', 40),
+            "-AcceptanceBuildDirectory", Path.GetTempPath()
+        }, TimeSpan.FromSeconds(20));
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Only explicitly approved disposable Windows x64 GitHub Actions",
+            result.Output + result.Error);
+    }
+
+    [Fact]
     public async Task WindowsManualHarnessCannotRunWithoutExplicitDisposableApproval()
     {
         if (!OperatingSystem.IsWindows()) return;
