@@ -143,15 +143,59 @@ try {
   if (!$svc -or $svc.State -ne 'Running' -or
       $svc.StartName -notin @('LocalSystem','NT AUTHORITY\SYSTEM') -or
       $svc.PathName -notmatch 'service\\bke-licensing-agent-service\.exe') {
+    # Collect bounded, sanitized installer/SCM evidence ONLY on failure.
+    # Do not print an entire installer log or environment/issuer contents.
     $state=if ($svc) { [string]$svc.State } else { 'MISSING' }
     $identity=if ($svc) { [string]$svc.StartName } else { 'MISSING' }
     $imageMatches=if ($svc) {
       [bool]($svc.PathName -match 'service\\bke-licensing-agent-service\.exe')
     } else { $false }
     $pidValue=if ($svc) { [int]$svc.ProcessId } else { 0 }
-    throw ("Installed Agent SCM verification FAIL: " +
-      "state=$state account=$identity canonicalServiceImage=$imageMatches " +
-      "servicePidPresent=$($pidValue -gt 0); installer exit=0. " +
+    $registration=Test-Path -LiteralPath (
+      'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\' + $service)
+    $canonicalServiceExe=Test-Path -LiteralPath (
+      Join-Path $agentRoot 'service\bke-licensing-agent-service.exe')
+    $canonicalRuntimeExe=Test-Path -LiteralPath $runtime
+    $x86Root=Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) (
+      'BKE Digital Solutions\Licensing Agent')
+    $x86ServiceExe=Test-Path -LiteralPath (
+      Join-Path $x86Root 'service\bke-licensing-agent-service.exe')
+    $knownServices=@(Get-CimInstance Win32_Service |
+      Where-Object { $_.Name -like 'BKE*' } |
+      Select-Object -ExpandProperty Name)
+    $logExists=Test-Path -LiteralPath $installLog
+    $logFlags=@()
+    if ($logExists) {
+      $logLines=@(Get-Content -LiteralPath $installLog -ErrorAction Stop)
+      foreach ($rule in @(
+        @{Name='setup_started';Pattern='Starting the installation process'},
+        @{Name='installer_exception';Pattern='(?i)exception|aborted|could not execute|fatal error'},
+        @{Name='health_failed';Pattern='(?i)replacement runtime failed|did not recover local API health'},
+        @{Name='service_create';Pattern='(?i)service registration|sc.exe.*create'},
+        @{Name='service_start';Pattern='(?i)service startup|sc.exe.*start'},
+        @{Name='service_removed';Pattern='(?i)failed fresh-install cleanup|sc.exe.*delete'},
+        @{Name='setup_finished';Pattern='(?i)installation process succeeded|installation process finished|log closed'}
+      )) {
+        $count=@($logLines | Where-Object { $_ -match $rule.Pattern }).Count
+        $logFlags+=($rule.Name + ':' + $count)
+      }
+    }
+    $observed=[ordered]@{
+      scm_state=$state
+      service_account=$identity
+      canonical_service_image=$imageMatches
+      service_pid_present=($pidValue -gt 0)
+      scm_registry_key=$registration
+      canonical_service_exe_exists=$canonicalServiceExe
+      canonical_runtime_exe_exists=$canonicalRuntimeExe
+      x86_service_exe_exists=$x86ServiceExe
+      enumerated_bke_service_names=@($knownServices | Select-Object -First 5)
+      inno_log_exists=$logExists
+      inno_log_flags=@($logFlags)
+    }
+    $diagnostic=$observed | ConvertTo-Json -Compress -Depth 4
+    throw ("Installed Agent SCM verification FAIL after installer returned 0; " +
+      "sanitized installer/SCM diagnostic=" + $diagnostic + ". " +
       "Never accept missing, stopped, untrusted or redirected Agent.")
   }
   Write-Host 'PASS: installed canonical Agent SCM service running as LocalSystem.'
