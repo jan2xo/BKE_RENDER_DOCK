@@ -52,11 +52,18 @@ namespace BKE_MediaTools
             if (!agentGranted)
             {
 #if BKE_STARTUP_GATE_ACCEPTANCE
-                // NONSHIPPABLE headless proof only: 85 means the SDK verified
-                // the installed Agent transport and received an explicit DENY.
-                // Missing, fake or untrusted Agent remains 84. Neither opens UI.
+                // NONSHIPPABLE headless proof only. Do not mistake ANY
+                // Agent denial for evidence of an otherwise valid signed
+                // installed product that merely lacks a commercial credential.
+                // 84: absent/fake/untrusted Agent; 85: Agent denied for another
+                // reason; 86: trusted Agent specifically requires independent
+                // ACCOUNT/LICENSE_KEY proof. None of these opens the UI.
                 Environment.ExitCode =
-                    agentDecision?.Status == StandaloneStartupGateStatus.Denied ? 85 : 84;
+                    agentDecision?.Status != StandaloneStartupGateStatus.Denied
+                        ? 84
+                        : agentDecision.Reason == "independent_credential_required"
+                            ? 86
+                            : 85;
 #else
                 Environment.ExitCode = 84;
 #endif
