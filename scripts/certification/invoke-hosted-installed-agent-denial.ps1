@@ -126,12 +126,35 @@ try {
   $installed=$true
   $setup=Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$installLog") -Wait -PassThru
   if ($setup.ExitCode -ne 0) { throw "Canonical Agent disposable install failed: $($setup.ExitCode)" }
-  $svc=Get-CimInstance Win32_Service -Filter "Name='$service'"
+  # Installer exits only after startup health, but SCM/WMI state can lag.
+  # Bound the post-install observation window; never reinterpret a stopped
+  # service, wrong account, or wrong image path as a successful installation.
+  $serviceDeadline=[DateTime]::UtcNow.AddSeconds(35)
+  $svc=$null
+  do {
+    $svc=Get-CimInstance Win32_Service -Filter "Name='$service'"
+    if ($svc -and $svc.State -eq 'Running' -and
+        $svc.StartName -in @('LocalSystem','NT AUTHORITY\SYSTEM') -and
+        $svc.PathName -match 'service\\bke-licensing-agent-service\.exe') {
+      break
+    }
+    Start-Sleep -Milliseconds 750
+  } while ([DateTime]::UtcNow -lt $serviceDeadline)
   if (!$svc -or $svc.State -ne 'Running' -or
       $svc.StartName -notin @('LocalSystem','NT AUTHORITY\SYSTEM') -or
       $svc.PathName -notmatch 'service\\bke-licensing-agent-service\.exe') {
-    throw 'Installed Agent SCM service not LocalSystem/Running/canonical.'
+    $state=if ($svc) { [string]$svc.State } else { 'MISSING' }
+    $identity=if ($svc) { [string]$svc.StartName } else { 'MISSING' }
+    $imageMatches=if ($svc) {
+      [bool]($svc.PathName -match 'service\\bke-licensing-agent-service\.exe')
+    } else { $false }
+    $pidValue=if ($svc) { [int]$svc.ProcessId } else { 0 }
+    throw ("Installed Agent SCM verification FAIL: " +
+      "state=$state account=$identity canonicalServiceImage=$imageMatches " +
+      "servicePidPresent=$($pidValue -gt 0); installer exit=0. " +
+      "Never accept missing, stopped, untrusted or redirected Agent.")
   }
+  Write-Host 'PASS: installed canonical Agent SCM service running as LocalSystem.'
   $procs=@(Get-CimInstance Win32_Process -Filter "Name='bke-licensing-agent-runtime.exe'" |
     Where-Object { $_.ExecutablePath -and [string]::Equals(
       [IO.Path]::GetFullPath($_.ExecutablePath),[IO.Path]::GetFullPath($runtime),
