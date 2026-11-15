@@ -9,6 +9,7 @@ namespace RenderDock.Tests;
 /// commercial-key licensing or UI when the installed Agent is absent. Does not claim a
 /// positive installed Agent or hardware TPM result.
 /// </summary>
+[Collection("RenderDockExecutable")]
 public sealed class InstalledAgentAcceptanceHarnessTests
 {
     private static readonly string RepoRoot = FindRoot();

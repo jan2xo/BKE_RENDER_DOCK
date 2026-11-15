@@ -6,10 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="BKE.Licensing" Version="0.0.0-source.911ff400de49" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\BKE_RENDER_DOCK\Licensing\RenderDockStartupAuthorizationGate.cs" Link="Licensing\RenderDockStartupAuthorizationGate.cs" />
   </ItemGroup>
 </Project>

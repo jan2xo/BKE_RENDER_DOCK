@@ -2,6 +2,7 @@ using BKE.Desktop.Licensing;
 using BKE_MediaTools.Licensing;
 using BKE_MediaTools.Notifications;
 using BKE_MediaTools.Updates;
+using System.Text.Json;
 using static BKE_MediaTools.BKE_RenderDock;
 
 namespace BKE_MediaTools
@@ -31,14 +32,16 @@ namespace BKE_MediaTools
 #if BKE_STARTUP_GATE_CERTIFICATION
             // PREPRODUCTION ONLY: Agent must authenticate this very Windows
             // process and commit a signed-policy/credential/audit-backed grant
-            // before ANY enterprise, signed-key licensing or application path.
+            // before ANY enterprise, license verification, or application path.
             // No response, fake pipe, timeout or exception can bypass denial.
             bool agentGranted = false;
             StandaloneStartupGateResult? agentDecision = null;
             try
             {
-                using var startupTimeout = new CancellationTokenSource(
-                    TimeSpan.FromSeconds(10));
+                var pipeTimeout = RenderDockStartupAuthorizationGate.HasStagedBundle()
+                    ? TimeSpan.FromMilliseconds(150)
+                    : TimeSpan.FromSeconds(10);
+                using var startupTimeout = new CancellationTokenSource(pipeTimeout);
                 agentDecision = new BkeStandaloneStartupGateClient()
                     .AuthorizeConnectedProcessAsync(startupTimeout.Token)
                     .GetAwaiter().GetResult();
@@ -49,21 +52,25 @@ namespace BKE_MediaTools
                 // A failed preproduction startup proof never opens the UI.
             }
 
+            int fallbackExitCode =
+                agentDecision?.Status != StandaloneStartupGateStatus.Denied
+                    ? 84
+                    : agentDecision?.Reason == "independent_credential_required"
+                        ? 86
+                        : 85;
+            var nativeEvaluation = RenderDockStartupAuthorizationGate.Evaluate(agentGranted, fallbackExitCode);
+            agentGranted = nativeEvaluation.Authorized;
+
             if (!agentGranted)
             {
 #if BKE_STARTUP_GATE_ACCEPTANCE
                 // NONSHIPPABLE headless proof only. Do not mistake ANY
                 // Agent denial for evidence of an otherwise valid signed
                 // installed product that merely lacks a commercial credential.
-                // 84: absent/fake/untrusted Agent; 85: Agent denied for another
-                // reason; 86: trusted Agent specifically requires independent
-                // ACCOUNT/LICENSE_KEY proof. None of these opens the UI.
-                Environment.ExitCode =
-                    agentDecision?.Status != StandaloneStartupGateStatus.Denied
-                        ? 84
-                        : agentDecision?.Reason == "independent_credential_required"
-                            ? 86
-                            : 85;
+                // 84: absent/fake/untrusted Agent; 85: invalid/expired/tampered
+                // policy or lease; 86: independent ACCOUNT/LICENSE_KEY proof
+                // required or mode mismatch. None of these opens the UI.
+                Environment.ExitCode = nativeEvaluation.ExitCode;
 #else
                 Environment.ExitCode = 84;
 #endif
@@ -72,12 +79,15 @@ namespace BKE_MediaTools
             strictAgentGateGranted = true;
 
 #if BKE_STARTUP_GATE_ACCEPTANCE
-            // Separate NONSHIPPABLE HEADLESS acceptance binary. A zero exit
-            // proves the real SDK returned an Agent grant for THIS process.
-            // The acceptance harness independently verifies the Agent's
-            // durable grant row; this marker is not commercial authority.
-            Environment.ExitCode = 0;
-            return;
+            if (!nativeEvaluation.RunProtectedStartupProbe)
+            {
+                // Separate NONSHIPPABLE HEADLESS acceptance binary. A zero exit
+                // proves the real SDK returned an Agent grant for THIS process.
+                // The acceptance harness independently verifies the Agent's
+                // durable grant row; this marker is not commercial authority.
+                Environment.ExitCode = 0;
+                return;
+            }
 #endif
 #endif
 
@@ -128,12 +138,61 @@ namespace BKE_MediaTools
                 }
             }
 
+#if BKE_STARTUP_GATE_CERTIFICATION && BKE_STARTUP_GATE_ACCEPTANCE
+            if (!nativeEvaluation.RunProtectedStartupProbe)
+            {
+                FfmpegBootstrap.EnsurePresentOrOffer();
+            }
+            var mainForm = new BKE_RenderDock();
+            UpdateCoordinator.Attach(mainForm, enterpriseSession);
+            NotificationCoordinator.Attach(mainForm, enterpriseSession);
+            NotificationTrayController.Attach(mainForm, enterpriseSession);
+            if (nativeEvaluation.RunProtectedStartupProbe &&
+                !string.IsNullOrWhiteSpace(nativeEvaluation.ProtectedProbeOutputPath))
+            {
+                var probePath = nativeEvaluation.ProtectedProbeOutputPath;
+                mainForm.Shown += (_, _) =>
+                {
+                    try
+                    {
+                        var probeDir = Path.GetDirectoryName(probePath);
+                        if (!string.IsNullOrWhiteSpace(probeDir))
+                        {
+                            Directory.CreateDirectory(probeDir);
+                        }
+
+                        var evidence = JsonSerializer.Serialize(new
+                        {
+                            ProtectedStartupExecuted = true,
+                            MainFormHandleCreated = mainForm.IsHandleCreated,
+                            FormName = mainForm.Name,
+                            FormTitle = mainForm.Text,
+                            AllowDrop = mainForm.AllowDrop,
+                            NotificationBellAttached = mainForm.Controls.ContainsKey("notificationBell"),
+                            ProcessId = Environment.ProcessId,
+                            ProductId = RenderDockStartupAuthorizationGate.CanonicalProductId,
+                            Version = RenderDockStartupAuthorizationGate.CanonicalVersion,
+                            ActivationMode = nativeEvaluation.ActivationMode,
+                            CredentialUsed = nativeEvaluation.Decision?.CredentialUsed,
+                            LeaseId = nativeEvaluation.Decision?.LeaseId,
+                        });
+                        File.WriteAllText(probePath, evidence);
+                    }
+                    finally
+                    {
+                        mainForm.Close();
+                    }
+                };
+            }
+            Application.Run(mainForm);
+#else
             FfmpegBootstrap.EnsurePresentOrOffer();
             var mainForm = new BKE_RenderDock();
             UpdateCoordinator.Attach(mainForm, enterpriseSession);
             NotificationCoordinator.Attach(mainForm, enterpriseSession);
             NotificationTrayController.Attach(mainForm, enterpriseSession);
             Application.Run(mainForm);
+#endif
         }
     }
 }
