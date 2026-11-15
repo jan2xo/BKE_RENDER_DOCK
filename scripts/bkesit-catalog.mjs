@@ -113,11 +113,20 @@ async function readJsonAtSha(path, sha) {
   assert(obj.encoding === "base64" && typeof obj.content === "string", "Expected repository JSON file");
   return JSON.parse(Buffer.from(obj.content.replace(/\s/g, ""), "base64").toString("utf8"));
 }
+export function assertExactSourceSha(actual, expected) {
+  if (typeof expected !== "string" || !/^[0-9a-f]{40}$/.test(expected) || actual !== expected) {
+    throw new Error("BKESIT publishing requires the exact current source release commit SHA");
+  }
+}
 export async function main(args = process.argv.slice(2)) {
-  if (args.length !== 2 || args[0] !== "--tag") throw new Error("Usage: node scripts/bkesit-catalog.mjs --tag v1.0.3");
+  if ((args.length !== 2 && args.length !== 4) || args[0] !== "--tag" ||
+      (args.length === 4 && args[2] !== "--source-sha")) {
+    throw new Error("Usage: node scripts/bkesit-catalog.mjs --tag v1.0.3 [--source-sha <40-character commit SHA>]");
+  }
   const tag = args[1];
   versionFromTag(tag);
   const reference = await resolveTag(tag);
+  if (args.length === 4) assertExactSourceSha(reference.sha, args[3]);
   const [release, productManifest, image] = await Promise.all([
     getGithub("releases/tags/" + encodeURIComponent(tag)),
     readJsonAtSha("BKE_RENDER_DOCK/bke.manifest.json", reference.sha),

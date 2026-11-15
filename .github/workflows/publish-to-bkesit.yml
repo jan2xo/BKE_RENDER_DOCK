@@ -1,0 +1,143 @@
+name: Publish Render Dock to BKESIT
+
+# One explicitly triggered source-side handoff; source GITHUB_TOKEN cannot dispatch
+# across repositories. The installed BKESIT GitHub App grants actions:write only
+# in BKESITSolutions/Software-Catalogs. No source/PR code runs with that token.
+on:
+  pull_request:
+    paths:
+      - "bke.md"
+      - ".github/workflows/publish-to-bkesit.yml"
+      - "scripts/bkesit-catalog.mjs"
+      - "scripts/bkesit-catalog.test.mjs"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published stable Render Dock release tag (e.g. v1.0.3)"
+        required: true
+        type: string
+      source_sha:
+        description: "Optional exact source commit SHA (auto-resolved from tag if blank)"
+        required: false
+        type: string
+      publish:
+        description: "Publish verified files to BKESIT (false = verify-only)"
+        required: true
+        default: false
+        type: boolean
+      acknowledgement:
+        description: "When publishing, type PUBLISH_RENDER_DOCK_TO_BKESIT"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-dock-bkesit-publish-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Test and check exact stable source release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.release.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Pure release and exact SHA regression tests
+        run: node --test scripts/bkesit-catalog.test.mjs
+      - name: Require trusted main branch for cross-repository publishing
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REF" == "refs/heads/main" ]] || {
+            echo "BKESIT publishing is restricted to Render Dock main." >&2
+            exit 1
+          }
+      - name: Verify existing stable release, product manifest and pin exact resolved source SHA
+        id: release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PUBLISH: ${{ inputs.publish }}
+          ACKNOWLEDGEMENT: ${{ inputs.acknowledgement }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$SOURCE_SHA" && ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Optional source SHA must be a 40-character lowercase commit SHA." >&2
+            exit 1
+          fi
+          if [[ "$PUBLISH" == "true" && "$ACKNOWLEDGEMENT" != "PUBLISH_RENDER_DOCK_TO_BKESIT" ]]; then
+            echo "An explicit Render Dock publication acknowledgement is required." >&2
+            exit 1
+          fi
+          if [[ -n "$SOURCE_SHA" ]]; then
+            node scripts/bkesit-catalog.mjs --tag "$RELEASE_TAG" --source-sha "$SOURCE_SHA"
+          else
+            node scripts/bkesit-catalog.mjs --tag "$RELEASE_TAG"
+          fi
+          exact_sha="$(node -e 'const e=require("./dist/bkesit/catalog-entry.json"); console.log(e.source.sha)')"
+          [[ "$exact_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          echo "source_sha=$exact_sha" >> "$GITHUB_OUTPUT"
+      - name: Preserve verified source candidate without publishing anything
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-dock-bkesit-source-candidate
+          path: dist/bkesit/catalog-entry.json
+          retention-days: 14
+          if-no-files-found: error
+
+  dispatch:
+    name: Trigger trusted BKESIT verification / publication
+    needs: verify
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Obtain destination-scoped GitHub App token
+        id: catalog-app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.BKESIT_CATALOG_PUBLISH_APP_ID }}
+          private-key: ${{ secrets.BKESIT_CATALOG_PUBLISH_APP_PRIVATE_KEY }}
+          owner: BKESITSolutions
+          repositories: Software-Catalogs
+          permission-actions: write
+          permission-contents: read
+      - name: Dispatch fixed BKESIT distribution workflow with exact verified source reference
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.catalog-app.outputs.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.verify.outputs.source_sha }}
+          PUBLISH: ${{ inputs.publish }}
+          ACKNOWLEDGEMENT: ${{ inputs.acknowledgement }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$PUBLISH" == "true" || "$PUBLISH" == "false" ]] || exit 1
+          jq -n --arg tag "$RELEASE_TAG" --arg sha "$SOURCE_SHA" --argjson publish "$PUBLISH" --arg ack "$ACKNOWLEDGEMENT" '{
+            ref: "main",
+            inputs: {tag: $tag, source_sha: $sha, publish: $publish, acknowledgement: $ack}
+          }' | gh api --method POST \
+            repos/BKESITSolutions/Software-Catalogs/actions/workflows/render-dock-distribution.yml/dispatches \
+            --input -
+          echo "BKESIT_REQUESTED: distribution workflow dispatched. This does NOT mean publication succeeded." >> "$GITHUB_STEP_SUMMARY"
+          echo "Review recipient workflow run: https://github.com/BKESITSolutions/Software-Catalogs/actions/workflows/render-dock-distribution.yml" >> "$GITHUB_STEP_SUMMARY"
