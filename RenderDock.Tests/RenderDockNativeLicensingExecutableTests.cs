@@ -55,6 +55,19 @@ public sealed class RenderDockNativeLicensingExecutableTests
         Assert.Equal(0, acctOk.ExitCode);
         Assert.Equal(ActivationCredentials.Account, acctOk.Decision?.CredentialUsed);
 
+        var bundleRoundTripPath = Path.Combine(Path.GetTempPath(), $"bke-rd-roundtrip-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllBytes(bundleRoundTripPath, JsonSerializer.SerializeToUtf8Bytes(accountBundle));
+            var fileOk = RenderDockStartupAuthorizationGate.EvaluateBundleFile(bundleRoundTripPath, authorityThumbprint, false, now);
+            Assert.True(fileOk.Authorized, fileOk.Reason);
+            Assert.Equal(0, fileOk.ExitCode);
+        }
+        finally
+        {
+            if (File.Exists(bundleRoundTripPath)) File.Delete(bundleRoundTripPath);
+        }
+
         // 2. Valid LICENSE_KEY + Agent proof -> ALLOW
         var licenseBundle = BuildSignedBundle(
             authority,
@@ -287,6 +300,10 @@ public sealed class RenderDockNativeLicensingExecutableTests
 
             var exePath = Path.Combine(publishDir, "RENDER DOCK.exe");
             Assert.True(File.Exists(exePath));
+            File.Copy(
+                Path.Combine(RepoRoot, "BKE_RENDER_DOCK", "bke.manifest.json"),
+                Path.Combine(publishDir, "bke.manifest.json"),
+                overwrite: true);
 
             var now = DateTimeOffset.UtcNow;
             var issuer = GenerateKeyPair("rd-exe-issuer");
@@ -312,7 +329,7 @@ public sealed class RenderDockNativeLicensingExecutableTests
                 {
                     var bundleWithProbe = bundle with { ProtectedProbeOutputPath = probePath };
                     var bundlePath = Path.Combine(scenarioDir, "startup-bundle.json");
-                    File.WriteAllText(bundlePath, JsonSerializer.Serialize(bundleWithProbe), Encoding.UTF8);
+                    File.WriteAllBytes(bundlePath, JsonSerializer.SerializeToUtf8Bytes(bundleWithProbe));
                     env[RenderDockStartupAuthorizationGate.BundleEnvVar] = bundlePath;
                 }
                 else
@@ -635,6 +652,7 @@ const challenge = await issueLeaseChallenge(challengeStore, {
   agentKeyThumbprint: thumb,
   action: 'OPEN',
   now,
+  ttlMs: 300000,
 });
 const challengeSignature = signLeaseChallengeProof(challenge.messageBase64url, agentPrivPem);
 
@@ -761,8 +779,8 @@ fs.writeFileSync(outFile, JSON.stringify({
                 fixture.Challenge.ChallengeId,
                 fixture.Challenge.Nonce,
                 fixture.Challenge.MessageHash,
-                fixture.Challenge.CreatedAt,
-                fixture.Challenge.ExpiresAt,
+                FormatUtc(now.AddMinutes(-1)),
+                FormatUtc(now.AddMinutes(5)),
                 fixture.Challenge.MessageBase64Url,
                 fixture.Challenge.SignatureBase64Url,
                 fixture.AgentPublicKeyPem),

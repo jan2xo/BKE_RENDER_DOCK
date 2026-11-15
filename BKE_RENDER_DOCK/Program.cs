@@ -161,7 +161,7 @@ namespace BKE_MediaTools
                             Directory.CreateDirectory(probeDir);
                         }
 
-                        var evidence = JsonSerializer.Serialize(new
+                        var evidence = JsonSerializer.SerializeToUtf8Bytes(new
                         {
                             ProtectedStartupExecuted = true,
                             MainFormHandleCreated = mainForm.IsHandleCreated,
@@ -176,11 +176,18 @@ namespace BKE_MediaTools
                             CredentialUsed = nativeEvaluation.Decision?.CredentialUsed,
                             LeaseId = nativeEvaluation.Decision?.LeaseId,
                         });
-                        File.WriteAllText(probePath, evidence);
+                        File.WriteAllBytes(probePath, evidence);
                     }
                     finally
                     {
-                        mainForm.Close();
+                        if (mainForm.IsHandleCreated)
+                        {
+                            mainForm.BeginInvoke(new Action(mainForm.Close));
+                        }
+                        else
+                        {
+                            mainForm.Close();
+                        }
                     }
                 };
             }

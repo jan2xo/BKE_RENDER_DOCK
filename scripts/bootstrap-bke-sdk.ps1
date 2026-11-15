@@ -207,6 +207,7 @@ const challenge = await issueLeaseChallenge(challengeStore, {
   agentKeyThumbprint: thumb,
   action: 'OPEN',
   now,
+  ttlMs: 300000,
 });
 const challengeSignature = signLeaseChallengeProof(challenge.messageBase64url, agentPrivPem);
 
