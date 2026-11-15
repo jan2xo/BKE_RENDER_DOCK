@@ -91,7 +91,12 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Prepare pinned BKE SDK capabilities
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Prepare pinned BKE SDK and native licensing capabilities
         shell: pwsh
         run: |
           $project = Get-Content 'BKE_RENDER_DOCK/RENDER DOCK.csproj' -Raw
@@ -109,6 +114,7 @@ jobs:
           $manifest = Get-Content "BKE_RENDER_DOCK/bke.manifest.json" -Raw | ConvertFrom-Json
           $program = Get-Content "BKE_RENDER_DOCK/Program.cs" -Raw
           $licensing = Get-Content "BKE_RENDER_DOCK/Licensing/AgentClient.cs" -Raw
+          $nativeGate = Get-Content "BKE_RENDER_DOCK/Licensing/RenderDockStartupAuthorizationGate.cs" -Raw
           $notifications = Get-Content "BKE_RENDER_DOCK/Notifications/NotificationCoordinator.cs" -Raw
           $tray = Get-Content "BKE_RENDER_DOCK/Notifications/NotificationTrayController.cs" -Raw
           $updates = Get-Content "BKE_RENDER_DOCK/Updates/UpdateCoordinator.cs" -Raw
@@ -138,6 +144,15 @@ jobs:
           }
           if ($project -notmatch 'PackageReference Include="BKE\.Notifications" Version="0\.5\.0"') { throw 'BKE Notifications 0.5.0 reference missing' }
           if ($project -notmatch 'PackageReference Include="BKE\.Updater" Version="0\.4\.0"') { throw 'BKE Updater 0.4.0 reference missing' }
+          if ($project -notmatch 'PackageReference Include="BKE\.Licensing" Version="0\.0\.0-source\.911ff400de49"') { throw 'Pinned BKE.Licensing development package reference missing' }
+          if (-not $bootstrap.Contains('911ff400de4931f2bd7e80f86a0eecee914f2021') -or
+              -not $bootstrap.Contains('c9461f9a5d847c9b8c6230901f02c0469e581434') -or
+              -not $bootstrap.Contains('0a6d0151e93acdfb5bd4435b64a7dbf53d010375')) {
+            throw 'BKE.Licensing source/tree or TypeScript contract pin missing in bootstrap script'
+          }
+          foreach ($symbol in @('ProductAuthorizationGate.Authorize', 'ActivationModePolicy.Evaluate', 'AccountProductLeaseVerifier.Verify', 'CommercialLeaseVerifier.Verify', 'LeaseChallengeProofVerifier.VerifyAndConsume')) {
+            if (-not $nativeGate.Contains($symbol)) { throw "Missing BKE.Licensing integration symbol: $symbol" }
+          }
 
 
           if ($licensing -notmatch 'BkeLicensingClient\.Create|EnsureAuthorizedAsync') { throw 'Canonical shared licensing flow missing' }
@@ -174,6 +189,7 @@ jobs:
           if (!$assets.Contains("BKE.Desktop.Licensing/$version")) {
             throw "Pinned BKE Desktop Licensing $version was not restored"
           }
+          if ($assets -notmatch 'BKE\.Licensing/0\.0\.0-source\.911ff400de49') { throw 'Pinned BKE.Licensing was not restored' }
           if ($assets -notmatch 'BKE\.Notifications/0\.5\.0') { throw 'BKE Notifications 0.5.0 was not restored' }
           if ($assets -notmatch 'BKE\.Updater/0\.4\.0') { throw 'BKE Updater 0.4.0 was not restored' }
           if ($assets -match 'BKE\.Desktop\.Client/1\.0\.0') { throw 'Legacy BKE Desktop Client must remain absent' }
@@ -223,6 +239,14 @@ jobs:
             $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
             $name = Split-Path -Leaf $file
             "$hash  $name"
+          }
+          $bkeLicensingPkg = 'packages/BKE.Licensing.0.0.0-source.911ff400de49.nupkg'
+          $bkeLicensingDll = 'artifacts/publish/win-x64/BKE.Licensing.dll'
+          foreach ($libFile in @($bkeLicensingPkg, $bkeLicensingDll)) {
+            if (-not (Test-Path -LiteralPath $libFile)) { throw "Native licensing artifact missing: $libFile" }
+            $libHash = (Get-FileHash -LiteralPath $libFile -Algorithm SHA256).Hash.ToLowerInvariant()
+            $libName = Split-Path -Leaf $libFile
+            $lines += "$libHash  $libName"
           }
           $lines | Set-Content 'artifacts/installer/SHA256SUMS'
           $lines | ForEach-Object { "$_" >> $env:GITHUB_STEP_SUMMARY }

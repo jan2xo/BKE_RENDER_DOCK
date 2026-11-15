@@ -69,6 +69,7 @@ public sealed class PackageContractTests
         Assert.Equal("net10.0-windows", project.Descendants("TargetFramework").Single().Value);
         Assert.Equal("net10.0", testProject.Descendants("TargetFramework").Single().Value);
         AssertPackage(project, "BKE.Desktop.Licensing", "2.0.2");
+        AssertPackage(project, "BKE.Licensing", "0.0.0-source.911ff400de49");
         AssertPackage(project, "BKE.Notifications", "0.5.0");
         AssertPackage(project, "BKE.Updater", "0.4.0");
         Assert.DoesNotContain(
@@ -138,7 +139,11 @@ public sealed class PackageContractTests
             RepositoryRoot, "scripts", "bootstrap-bke-sdk.ps1"));
 
         Assert.Contains("e34431f5400aab00e87549b8aae8dedc3104f4bb", bootstrap);
+        Assert.Contains("911ff400de4931f2bd7e80f86a0eecee914f2021", bootstrap);
+        Assert.Contains("c9461f9a5d847c9b8c6230901f02c0469e581434", bootstrap);
+        Assert.Contains("0a6d0151e93acdfb5bd4435b64a7dbf53d010375", bootstrap);
         Assert.Contains("BKE.Desktop.Licensing.2.0.2.nupkg", bootstrap);
+        Assert.Contains("BKE.Licensing.0.0.0-source.911ff400de49.nupkg", bootstrap);
         Assert.Contains("BKE.Notifications.0.5.0.nupkg", bootstrap);
         Assert.Contains("BKE.Updater.0.4.0.nupkg", bootstrap);
         Assert.DoesNotContain("packages/BKE.Desktop.Client.1.0.0", bootstrap, StringComparison.OrdinalIgnoreCase);
